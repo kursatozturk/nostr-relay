@@ -3,6 +3,8 @@ from enum import Enum
 
 class ErrorTypes(str, Enum):
     validation_error = "Validation Error"
+    not_found = "Not Found"
+    not_implemented = 'Not Implemented'
     unknown = "Unknown"
 
 

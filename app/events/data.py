@@ -24,7 +24,7 @@ class Marker(str, Enum):
 
 class NostrModel(BaseModel, ABC):
     @abstractmethod
-    def nostr_dict(self) -> dict[str, Any] | list[str | int |  dict[str, Any]]:
+    def nostr_dict(self) -> dict[str, Any] | list[str | int | dict[str, Any]]:
         raise NotImplementedError()
 
     class Config:
@@ -33,15 +33,20 @@ class NostrModel(BaseModel, ABC):
 
 class E_Tag(NostrModel):
     tag: Literal["e"]
-    e_id: str  # 32-bytes lowercase hex-encoded sha256 of the serialized event data
+    event_id: str  # 32-bytes lowercase hex-encoded sha256 of the serialized event data
     recommended_relay_url: str
     marker: Marker | None = None
 
     @cached_property
     def nostr_dict(self):
         if self.marker:
-            return [self.tag, self.e_id, self.recommended_relay_url, self.marker.value]
-        return [self.tag, self.e_id, self.recommended_relay_url]
+            return [
+                self.tag,
+                self.event_id,
+                self.recommended_relay_url,
+                self.marker.value,
+            ]
+        return [self.tag, self.event_id, self.recommended_relay_url]
 
 
 class P_Tag(NostrModel):
@@ -68,7 +73,7 @@ class Event(NostrModel):
         if tag_tuple[0] == "e":
             return E_Tag(
                 tag="e",
-                e_id=tag_tuple[1],
+                event_id=tag_tuple[1],
                 recommended_relay_url=tag_tuple[2],
                 marker=tag_tuple[3] if len(tag_tuple) > 3 else None,
             )
@@ -137,3 +142,7 @@ class Filters(NostrModel):
     limit: int | None = None
     e_tag: E_Tag | None = Field(None, alias="#e")
     p_tag: P_Tag | None = Field(None, alias="#p")
+
+    @cached_property
+    def nostr_dict(self):
+        return {"ids": self.ids}

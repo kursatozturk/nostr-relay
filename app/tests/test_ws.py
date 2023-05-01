@@ -2,7 +2,6 @@ import standalone_app
 from events.coms import MessageTypes
 from fastapi.testclient import TestClient
 
-
 # def test_event():
 #     client = TestClient(standalone_app.app)
 #     with client.websocket_connect('/nostr') as ws:

@@ -22,18 +22,20 @@ async def write_event(event: Event):
                 event.sig,
             ),
         )
-        e_tags: Iterable[E_Tag] = map(
-            lambda tag: (
+        e_tags = (
+            (
                 event.id,
-                tag.e_id,
+                tag.event_id,
                 tag.recommended_relay_url,
                 tag.marker.value if tag.marker else None,
-            ),
-            filter(lambda t: t.tag == "e", event.tags),
+            )
+            for tag in event.tags
+            if type(tag) is E_Tag
         )
-        p_tags: Iterable[P_Tag] = map(
-            lambda tag: (event.id, tag.pubkey, tag.recommended_relay_url),
-            filter(lambda t: t.tag == "p", event.tags),
+        p_tags = (
+            (event.id, tag.pubkey, tag.recommended_relay_url)
+            for tag in event.tags
+            if type(tag) is P_Tag
         )
         async with conn.pipeline():
             cur = conn.cursor()
@@ -56,11 +58,12 @@ async def write_event(event: Event):
 
 
 async def fetch_event(event_id: str, /, conn: AsyncConnection | None = None):
+    # TODO: The query logic is completely wrong!
     if conn is None:
         pool = get_nostr_db_pool()
         conn = pool.connection()
 
-    event: Event = None
+    event: Event | None = None
     async with conn as con:
         cur = con.cursor()
         rows = await (
@@ -77,14 +80,15 @@ async def fetch_event(event_id: str, /, conn: AsyncConnection | None = None):
         if len(rows):
             pubkey, created_at, kind, content, sig, *_ = rows[0]
             tags = [
-                ["e", *row[5:8]] if row[5] is not None else ["p", *row[8:10]]
+                ("e", *row[5:8]) if row[5] is not None else ("p", *row[8:10])
                 for row in rows
             ]
             event = Event(
+                id=event_id,
                 pubkey=pubkey,
                 created_at=created_at,
                 kind=kind,
-                tags=tags,
+                tags=tags, # type: ignore
                 content=content,
                 sig=sig,
             )
