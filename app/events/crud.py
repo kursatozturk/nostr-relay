@@ -1,8 +1,7 @@
-from typing import Coroutine, Iterable, TypeVar
-
+from typing import Any, Iterable
 from db.core import get_nostr_db_pool
 from events.data import E_Tag, Event, P_Tag
-from psycopg import AsyncConnection
+from psycopg import AsyncConnection, sql
 
 
 async def write_event(event: Event):
@@ -57,7 +56,7 @@ async def write_event(event: Event):
             )
 
 
-async def fetch_event(event_id: str, /, conn: AsyncConnection | None = None):
+async def fetch_event(event_id: str, *, conn: AsyncConnection | None = None):
     # TODO: The query logic is completely wrong!
     if conn is None:
         pool = get_nostr_db_pool()
@@ -88,9 +87,42 @@ async def fetch_event(event_id: str, /, conn: AsyncConnection | None = None):
                 pubkey=pubkey,
                 created_at=created_at,
                 kind=kind,
-                tags=tags, # type: ignore
+                tags=tags,  # type: ignore
                 content=content,
                 sig=sig,
             )
 
     return event
+
+
+async def query_tags(*, conn: AsyncConnection | None = None):
+    # Literal Values
+    field_names = ("event_id", "relay_url", "marker")
+    table_name = "e_tag"
+    id_prefixes = ["eab9c7fb4b34cb2f", "11bbfc8a353fbe5bcf7971"]
+
+    # Templates
+    prefix_q = sql.SQL("{fname} SIMILAR TO {p_regex}")
+
+    # Prepared !Composables
+    fields = sql.SQL(",").join(sql.Identifier(fname) for fname in field_names)
+    p_regex = sql.Literal(f'({"|".join(id_prefixes)})%')
+
+    # Template formatting
+    id_filter = prefix_q.format(fname=sql.Identifier("event_id"), p_regex=p_regex)
+
+    # Query building
+    q = sql.SQL("SELECT {fields} from {table_name} WHERE {filters}").format(
+        fields=fields,
+        table_name=sql.Identifier(table_name),
+        filters=sql.Composed([id_filter, sql.SQL("")]),
+    )
+    if conn is None:
+        pool = get_nostr_db_pool()
+        conn = pool.connection()
+
+    async with conn as con:
+        print(q.as_string(con))
+        cur = await con.execute(q)
+        rows = await cur.fetchall()
+        print(rows)
