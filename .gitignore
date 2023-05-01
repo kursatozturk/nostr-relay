@@ -1,0 +1,9 @@
+.vscode/
+env/
+**/__pycache__/
+**/.mypy_cache
+**/.pytest_cache
+db/.env
+Dockerfile
+**/*.env
+docker-compose.yml
