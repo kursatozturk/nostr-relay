@@ -1,17 +1,57 @@
-from typing import Any, Iterable
+from typing import Literal, Sequence, TypedDict, cast
+
 from db.core import get_nostr_db_pool
-from events.data import E_Tag, Event, P_Tag
-from psycopg import AsyncConnection, sql
+from db.query import (
+    PLACE_HOLDER,
+    construct_equal_clause,
+    construct_insert_into,
+    construct_select_statement,
+    construct_select_from_query,
+)
+from events.data import E_Tag, Event, Filters, Kind, P_Tag
+from psycopg import AsyncConnection
+from psycopg.rows import dict_row
+
+EVENT_TABLE_NAME = "event"
+EVENT_FIELDS = ["id", "pubkey", "created_at", "kind", "content", "sig"]
+E_TAG_TABLE_NAME = "e_tag"
+E_TAG_FIELDS = ["event_id", "relay_url", "marker"]
+E_TAG_INSERT_FIELDS = ["associated_event", *E_TAG_FIELDS]
+E_TAG_ORDERING = tuple(f"{E_TAG_TABLE_NAME}.{fname}" for fname in E_TAG_FIELDS)
+
+P_TAG_TABLE_NAME = "p_tag"
+P_TAG_FIELDS = ["pubkey", "relay_url"]
+P_TAG_INSERT_FIELDS = ["associated_event", *P_TAG_FIELDS]
+P_TAG_ORDERING = tuple(f"{P_TAG_TABLE_NAME}.{fname}" for fname in P_TAG_FIELDS)
+
+ETagRow = tuple[Literal["e"], str, str, str, str | None]
+PTagRow = tuple[str, str, str]
+
+
+def flat_list(l: Sequence[Sequence]) -> list:
+    return [a for sl in l for a in sl]
+
+
+class EventDict(TypedDict):
+    id: str
+    pubkey: str
+    created_at: int
+    kind: Kind
+    content: str
+    sig: str
 
 
 async def write_event(event: Event):
     pool = get_nostr_db_pool()
     async with pool.connection() as conn:
-        await conn.execute(
-            """ INSERT INTO event
-        (id, pubkey, created_at, kind, content, sig)
-        VALUES (%s, %s, %s, %s, %s, %s)
-        """,
+        insert_query = construct_insert_into(
+            EVENT_TABLE_NAME,
+            EVENT_FIELDS,
+            value_list=[tuple(PLACE_HOLDER for _ in EVENT_FIELDS)],
+        )
+        cur = conn.cursor()
+        await cur.execute(
+            insert_query,
             (
                 event.id,
                 event.pubkey,
@@ -21,7 +61,7 @@ async def write_event(event: Event):
                 event.sig,
             ),
         )
-        e_tags = (
+        e_tags = list(
             (
                 event.id,
                 tag.event_id,
@@ -31,98 +71,75 @@ async def write_event(event: Event):
             for tag in event.tags
             if type(tag) is E_Tag
         )
-        p_tags = (
+        p_tags = list(
             (event.id, tag.pubkey, tag.recommended_relay_url)
             for tag in event.tags
             if type(tag) is P_Tag
         )
         async with conn.pipeline():
             cur = conn.cursor()
-            await cur.executemany(
-                """
-                    INSERT INTO e_tag
-                    (associated_event, event_id, relay_url, marker)
-                    VALUES (%s, %s, %s, %s)
-                """,
-                e_tags,
+            e_tag_q = construct_insert_into(
+                E_TAG_TABLE_NAME,
+                E_TAG_INSERT_FIELDS,
+                (tuple(PLACE_HOLDER for _ in row) for row in e_tags),
             )
-            await cur.executemany(
-                """
-                INSERT INTO p_tag
-                (associated_event, pubkey, relay_url)
-                VALUES (%s, %s, %s)
-                """,
-                p_tags,
+            await cur.execute(e_tag_q, flat_list(e_tags))
+            p_tag_q = construct_insert_into(
+                P_TAG_TABLE_NAME,
+                P_TAG_INSERT_FIELDS,
+                (tuple(PLACE_HOLDER for _ in row) for row in p_tags),
             )
+
+            await cur.execute(p_tag_q, flat_list(p_tags))
+
+
+def filter_events(filters: Filters):
+    ...
 
 
 async def fetch_event(event_id: str, *, conn: AsyncConnection | None = None):
-    # TODO: The query logic is completely wrong!
-    if conn is None:
-        pool = get_nostr_db_pool()
-        conn = pool.connection()
-
-    event: Event | None = None
-    async with conn as con:
-        cur = con.cursor()
-        rows = await (
-            await cur.execute(
-                "SELECT e.pubkey, e.created_at, e.kind, e.content, e.sig, "
-                "et.event_id, et.relay_url, et.marker, "
-                "pt.pubkey, pt.relay_url "
-                "FROM event e LEFT JOIN e_tag et ON e.id=et.associated_event "
-                "LEFT JOIN p_tag pt ON e.id=pt.associated_event "
-                "WHERE e.id = %s;",
-                (event_id,),
-            )
-        ).fetchall()
-        if len(rows):
-            pubkey, created_at, kind, content, sig, *_ = rows[0]
-            tags = [
-                ("e", *row[5:8]) if row[5] is not None else ("p", *row[8:10])
-                for row in rows
-            ]
-            event = Event(
-                id=event_id,
-                pubkey=pubkey,
-                created_at=created_at,
-                kind=kind,
-                tags=tags,  # type: ignore
-                content=content,
-                sig=sig,
-            )
-
-    return event
-
-
-async def query_tags(*, conn: AsyncConnection | None = None):
-    # Literal Values
-    field_names = ("event_id", "relay_url", "marker")
-    table_name = "e_tag"
-    id_prefixes = ["eab9c7fb4b34cb2f", "11bbfc8a353fbe5bcf7971"]
-
-    # Templates
-    prefix_q = sql.SQL("{fname} SIMILAR TO {p_regex}")
-
-    # Prepared !Composables
-    fields = sql.SQL(",").join(sql.Identifier(fname) for fname in field_names)
-    p_regex = sql.Literal(f'({"|".join(id_prefixes)})%')
-
-    # Template formatting
-    id_filter = prefix_q.format(fname=sql.Identifier("event_id"), p_regex=p_regex)
-
-    # Query building
-    q = sql.SQL("SELECT {fields} from {table_name} WHERE {filters}").format(
-        fields=fields,
-        table_name=sql.Identifier(table_name),
-        filters=sql.Composed([id_filter, sql.SQL("")]),
-    )
     if conn is None:
         pool = get_nostr_db_pool()
         conn = pool.connection()
 
     async with conn as con:
-        print(q.as_string(con))
-        cur = await con.execute(q)
-        rows = await cur.fetchall()
-        print(rows)
+        select_event = construct_select_statement(
+            (EVENT_TABLE_NAME, f) for f in EVENT_FIELDS
+        )
+        clause = construct_equal_clause((EVENT_TABLE_NAME, "id"))
+        event_query = construct_select_from_query(
+            select_event, EVENT_TABLE_NAME, clause
+        )
+        cur = con.cursor("event_cur", row_factory=dict_row)
+        event_row = cast(
+            EventDict,
+            await (await cur.execute(query=event_query, params=(event_id,))).fetchone(),
+        )
+        if event_row is None:
+            return
+        select_tags = construct_select_statement(
+            ((E_TAG_TABLE_NAME, f) for f in E_TAG_FIELDS),
+            as_names={"e": "tag"},
+            ordering=("tag", *E_TAG_ORDERING),
+        )
+        clause = construct_equal_clause((E_TAG_TABLE_NAME, "associated_event"))
+        e_query = construct_select_from_query(select_tags, E_TAG_TABLE_NAME, clause)
+        e_tag_rows = cast(
+            list[ETagRow],
+            await (await con.execute(query=e_query, params=(event_id,))).fetchall(),
+        )
+
+        select_tags = construct_select_statement(
+            ((P_TAG_TABLE_NAME, f) for f in P_TAG_FIELDS),
+            as_names={"p": "tag"},
+            ordering=("tag", *P_TAG_ORDERING),
+        )
+        clause = construct_equal_clause(
+            (P_TAG_TABLE_NAME, "associated_event"), PLACE_HOLDER
+        )
+        p_query = construct_select_from_query(select_tags, P_TAG_TABLE_NAME, clause)
+        p_tag_rows = cast(
+            list[PTagRow],
+            await (await con.execute(query=p_query, params=(event_id,))).fetchall(),
+        )
+        return Event(**event_row, tags=[*e_tag_rows, *p_tag_rows])  # type: ignore

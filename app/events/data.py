@@ -69,21 +69,27 @@ class Event(NostrModel):
     sig: str  # 64-bytes hex of the signature of the sha256 hash of the serialized event data, which is the same as the "id" field
 
     @validator("tags", pre=True, each_item=True)
-    def separate_tags(cls, tag_tuple: tuple):
-        if tag_tuple[0] == "e":
-            return E_Tag(
-                tag="e",
-                event_id=tag_tuple[1],
-                recommended_relay_url=tag_tuple[2],
-                marker=tag_tuple[3] if len(tag_tuple) > 3 else None,
-            )
-        elif tag_tuple[0] == "p":
-            return P_Tag(
-                tag="p", pubkey=tag_tuple[1], recommended_relay_url=tag_tuple[2]
-            )
+    def separate_tags(cls, tag_data: tuple | dict):
+        if type(tag_data) is dict:
+            if tag_data["tag"] == "e":
+                return E_Tag(**tag_data)
+            else:
+                return P_Tag(**tag_data)
         else:
-            # TODO: Add Tag Validations
-            assert False
+            if tag_data[0] == "e":
+                return E_Tag(
+                    tag="e",
+                    event_id=tag_data[1],
+                    recommended_relay_url=tag_data[2],
+                    marker=tag_data[3] if len(tag_data) > 3 else None,
+                )
+            elif tag_data[0] == "p":
+                return P_Tag(
+                    tag="p", pubkey=tag_data[1], recommended_relay_url=tag_data[2]
+                )
+            else:
+                # TODO: Add Tag Validations
+                assert False
 
     @validator("kind", pre=True)
     def parse_int(cls, kind: str):
