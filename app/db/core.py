@@ -2,12 +2,13 @@ import os
 from functools import cache
 
 from psycopg import AsyncConnection
-from psycopg_pool import AsyncConnectionPool, ConnectionPool
+from psycopg_pool import AsyncConnectionPool
+from db.typings import DBConnection, DBConnectionPool
 
 
 def __get_db_pool(
     *, user: str, host: str, password: str, db_name: str, app_name: str = "nostr-relay"
-):
+) -> DBConnectionPool:
     """
     Creates a pool connection and returns it with the given credentials
     """
@@ -18,7 +19,7 @@ def __get_db_pool(
 
 
 @cache
-def get_nostr_db_pool():
+def connect_db_pool() -> DBConnectionPool:
     """
     Returns the connection pool
     It caches the pool object to not to initiate
@@ -27,14 +28,14 @@ def get_nostr_db_pool():
     If pool needs to re-initiate, please use get_db_pool.cache_clear()
     """
     return __get_db_pool(
-        user=os.getenv("user"),
-        host=os.getenv("host"),
-        password=os.getenv("password"),
-        db_name=os.getenv("db"),
+        user=os.getenv("user", ""),
+        host=os.getenv("host", ""),
+        password=os.getenv("password", ""),
+        db_name=os.getenv("db", ""),
     )
 
 
-async def _get_async_connection():
+async def _get_async_connection() -> DBConnection:
     """
     Use with caution!
     This is intended for one time running background tasks. Do not use it
@@ -51,6 +52,6 @@ async def _get_async_connection():
 
 
 async def close_pool():
-    cached_pool = get_nostr_db_pool()
-    get_nostr_db_pool.cache_clear()
+    cached_pool = connect_db_pool()
+    connect_db_pool.cache_clear()
     await cached_pool.close()

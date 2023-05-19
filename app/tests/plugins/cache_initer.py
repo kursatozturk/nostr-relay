@@ -3,4 +3,4 @@ from pytest import Session
 
 
 def pytest_sessionstart(session: Session):
-    load_dotenv("db/.env")  # load db credentials
+    load_dotenv("cache/.env")  # load cache credentials

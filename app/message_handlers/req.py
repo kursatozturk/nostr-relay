@@ -1,55 +1,38 @@
-from db.query import (
-    PLACE_HOLDER,
-    construct_in_clause,
-    construct_lte_gte_clause,
-    construct_prefix_clause,
-)
-from events.crud import fetch_event
-from events.data import Filters
+import json
+
+from cache.crud import listen_on_key
+from events.crud import filter_events
+from events.data import Event
+from events.enums import MessageTypes
+from events.filters import EventFilterer, Filters
+from events.typings import EventNostrDict
+from fastapi import WebSocket
+from pydantic import ValidationError
 from utils.errors import ErrorTypes, InvalidMessageError
 
+NEW_EVENT_KEY = "events"
 
-async def handle_received_req(filters_dict: dict):
-    """
-    Caution: This function is a mock implementation
-    The implementation of this function waits the design to
-    allow usage of the NIPs as modular as possible
-    """
-    # TODO: Implement the function
-    fs = Filters(**filters_dict)
 
-    filters = []
-    values: list[str | int | float] = []
-    if fs.ids:
-        id_filter = construct_prefix_clause("id", prefix_count=len(fs.ids))
-        filters.append(id_filter)
-        values.extend(fs.ids)
+async def create_listener(
+    ws: WebSocket, filters: Filters, subscription_id: str
+) -> None:
+    event_filterer = EventFilterer(filters)
+    async with listen_on_key(NEW_EVENT_KEY) as listener:
+        async for event_str in listener:
+            if event_str["type"] == "message":
+                event: EventNostrDict = json.loads(event_str["data"])
+            if event_filterer.test_event(event):
+                await ws.send_json([MessageTypes.Event.value, subscription_id, event])
 
-    if fs.authors:
-        author_filter = construct_prefix_clause("pubkey", prefix_count=len(fs.authors))
-        filters.append(author_filter)
-        values.extend(fs.authors)
 
-    if fs.kinds:
-        kind_filter = construct_in_clause("kind", value_count=len(fs.kinds))
-        filters.append(kind_filter)
-        values.extend(map(str, fs.kinds))
-
-    if fs.since or fs.until:
-        btwn_filter = construct_lte_gte_clause(
-            "created_at",
-            gte=PLACE_HOLDER if fs.since else None,
-            lte=PLACE_HOLDER if fs.until else None
+async def handle_received_req(filters_dict: dict) -> tuple[list[Event], Filters]:
+    try:
+        filters = Filters(**filters_dict)
+        events = await filter_events(filters)
+        return events, filters
+    except ValidationError as exc:
+        raise InvalidMessageError(
+            "Invalid Filters!",
+            error_type=ErrorTypes.validation_error,
+            encapsulated_exc=exc,
         )
-        filters.append(btwn_filter)
-        if fs.since:
-            values.append(fs.since)
-        if fs.until:
-            values.append(fs.until)
-
-
-    # event_id = fs.ids[0]
-    # event = await fetch_event(event_id)
-    # if event is None:
-    #     raise InvalidMessageError("Event Not Found", error_type=ErrorTypes.not_found)
-    # return event

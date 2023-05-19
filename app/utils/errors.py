@@ -5,6 +5,7 @@ class ErrorTypes(str, Enum):
     validation_error = "Validation Error"
     not_found = "Not Found"
     not_implemented = 'Not Implemented'
+    invalid_argumentation = 'Invalid Arguments'
     unknown = "Unknown"
 
 
