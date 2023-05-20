@@ -18,11 +18,15 @@ async def create_listener(
 ) -> None:
     event_filterer = EventFilterer(filters)
     async with listen_on_key(NEW_EVENT_KEY) as listener:
+        print(listener)
+        print(event_filterer._filters.json())
         async for event_str in listener:
+            print(event_str, flush=True)
             if event_str["type"] == "message":
                 event: EventNostrDict = json.loads(event_str["data"])
-            if event_filterer.test_event(event):
-                await ws.send_json([MessageTypes.Event.value, subscription_id, event])
+                if event_filterer.test_event(event):
+                    print('Tested! sending')
+                    await ws.send_json([MessageTypes.Event.value, subscription_id, event])
 
 
 async def handle_received_req(filters_dict: dict) -> tuple[list[Event], Filters]:

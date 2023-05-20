@@ -2,7 +2,7 @@ import json
 from functools import cached_property
 from typing import cast
 
-from events.typings import ETagRow, KindType, PTagRow
+from events.typings import ETagRow, KindType, MarkedETagRow, PTagRow
 from pydantic import Field, validator
 from tags import E_Tag, P_Tag
 from utils.models import NostrModel
@@ -18,21 +18,21 @@ class Event(NostrModel):
     sig: str  # 64-bytes hex of the signature of the sha256 hash of the serialized event data, which is the same as the "id" field
 
     @validator("tags", pre=True, each_item=True)
-    def separate_tags(cls, tag_data: ETagRow | PTagRow | dict):
-        print(tag_data)
-        if type(tag_data) is dict:
+    def separate_tags(cls, tag_data: E_Tag | P_Tag | ETagRow | PTagRow | dict):
+        if isinstance(tag_data, E_Tag) or isinstance(tag_data, P_Tag):
+            return tag_data
+        elif isinstance(tag_data, dict):
             if tag_data["tag"] == "#e":
                 return E_Tag(**tag_data)
             else:
                 return P_Tag(**tag_data)
         else:
             if tag_data[0] == "#e":
-                tag_data = cast(ETagRow, tag_data)
                 return E_Tag(
                     tag="#e",
                     event_id=tag_data[1],
                     recommended_relay_url=tag_data[2],
-                    marker=tag_data[3] if len(tag_data) > 3 else None,
+                    marker=cast(MarkedETagRow, tag_data)[3] if len(tag_data) > 3 else None,
                 )
             elif tag_data[0] == "#p":
                 return P_Tag(

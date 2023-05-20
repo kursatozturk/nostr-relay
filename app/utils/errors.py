@@ -20,3 +20,6 @@ class InvalidMessageError(Exception):
         super().__init__(message)
         self.error = error_type
         self.encapsulated_exc = encapsulated_exc
+
+    def __str__(self) -> str:
+        return f'{self.error} [{self.encapsulated_exc!r}]'

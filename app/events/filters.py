@@ -64,12 +64,12 @@ class EventFilterer:
         if filters.e_tag:
             e_tag_set = set(filters.e_tag)
             # "#e", "{event_id}", *rest_values of tag
-            tag_tests.setdefault("e", lambda val, *_: val in e_tag_set)
+            tag_tests.setdefault("#e", lambda val, *_: val in e_tag_set)
 
         if filters.p_tag:
             p_tag_set = set(filters.p_tag)
             # "#p", "{pubkey}", *rest_values of tag
-            tag_tests.setdefault("p", lambda val, *_: val in p_tag_set)
+            tag_tests.setdefault("#p", lambda val, *_: val in p_tag_set)
 
         if len(tag_tests):
 

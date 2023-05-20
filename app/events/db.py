@@ -30,7 +30,7 @@ def db_to_nostr(event_row: tuple[Any, ...]) -> EventDBDict:
 
 def generate_sql_schema_e_tag() -> str:
     return f"""
-    CREATE TYPE marker_type AS ENUM ("reply", "root", "mention");
+    CREATE TYPE marker_type AS ENUM ('reply', 'root', 'mention');
     CREATE TABLE e_tag (
       e_id SERIAL PRIMARY KEY,
       associated_event CHAR(32) REFERENCES event(id),
@@ -58,7 +58,7 @@ def generate_sql_schema_event() -> str:
         id CHAR(32) PRIMARY KEY,
         pubkey CHAR(32),
         created_at BIGINT,
-        kind int,
+        kind INT,
         content TEXT,
         sig CHAR(64)
     );
@@ -68,7 +68,7 @@ def generate_sql_schema_event() -> str:
 def clean_out_db() -> str:
   return f"""
   DROP TABLE e_tag;
-  DROP TABLE p_ag;
+  DROP TABLE p_tag;
   DROP TYPE marker_type;
   DROP TABLE event;
   DROP TYPE kinds;

@@ -1,21 +1,38 @@
 from collections import deque
 from contextlib import _AsyncGeneratorContextManager
-from typing import Any, cast
+from itertools import groupby
+from typing import Any, Iterable, TypedDict, cast
 
 from db.query import run_queries
-from db.query_utils import (create_runnable_query, prepare_equal_clause,
-                            prepare_in_clause, prepare_insert_into,
-                            prepare_lte_gte_clause, prepare_prefix_clause,
-                            prepare_select_statement)
+from db.query_utils import (
+    create_runnable_query,
+    prepare_equal_clause,
+    prepare_in_clause,
+    prepare_insert_into,
+    prepare_lte_gte_clause,
+    prepare_prefix_clause,
+    prepare_select_statement,
+)
 from events.data import Event
-from events.db import (E_TAG_FIELDS, E_TAG_INSERT_FIELDS, E_TAG_ORDERING,
-                       E_TAG_TABLE_NAME, EVENT_FIELDS, EVENT_TABLE_NAME,
-                       P_TAG_FIELDS, P_TAG_INSERT_FIELDS, P_TAG_ORDERING,
-                       P_TAG_TABLE_NAME, db_to_nostr)
+from events.db import (
+    E_TAG_FIELDS,
+    E_TAG_INSERT_FIELDS,
+    E_TAG_ORDERING,
+    E_TAG_TABLE_NAME,
+    EVENT_FIELDS,
+    EVENT_TABLE_NAME,
+    P_TAG_FIELDS,
+    P_TAG_INSERT_FIELDS,
+    P_TAG_ORDERING,
+    P_TAG_TABLE_NAME,
+    db_to_nostr,
+)
 from events.filters import Filters
-from events.typings import ETagRow, EventNostrDict, PTagRow
+from events.typings import ETagRow, PTagRow
 from psycopg import AsyncConnection
 from tags import E_Tag, P_Tag
+from tags.data.e_tag import db_to_e_tag
+from tags.data.p_tag import db_to_p_tag
 from utils.tools import flat_list
 
 
@@ -149,7 +166,7 @@ async def filter_events(
         return []
 
     in_clause = prepare_in_clause(
-        (E_TAG_TABLE_NAME, "associated_event"), value_count=len(event_ids)
+        (E_TAG_TABLE_NAME, "associated_event"), value_count=1  # len(event_ids)
     )
     selector = prepare_select_statement(
         ((E_TAG_TABLE_NAME, f) for f in E_TAG_INSERT_FIELDS),
@@ -163,7 +180,7 @@ async def filter_events(
     e_query = create_runnable_query(selector, E_TAG_TABLE_NAME, in_clause)
 
     in_clause = prepare_in_clause(
-        (P_TAG_TABLE_NAME, "associated_event"), value_count=len(event_ids)
+        (P_TAG_TABLE_NAME, "associated_event"), value_count=1  # len(event_ids)
     )
 
     selector = prepare_select_statement(
@@ -178,18 +195,29 @@ async def filter_events(
     p_query = create_runnable_query(selector, P_TAG_TABLE_NAME, in_clause)
 
     tags = await run_queries(
-        return_queries={"#p": (p_query, event_ids), "#e": (e_query, event_ids)},
+        return_queries={"#p": (p_query, (event_ids,)), "#e": (e_query, (event_ids,))},
+        data_converters={"#p": db_to_p_tag, "#e": db_to_e_tag},
         conn=conn,
     )
-    event_e_tags = {e_id: tag for (e_id, *tag) in tags.get("#e", [])}
-    event_p_tags = {e_id: tag for (e_id, *tag) in tags.get("#p", [])}
-
+    event_e_tags = dict(
+        groupby(sorted(tags.get("#e", []), key=lambda e: e[0]), lambda e: e[0])
+    )
+    event_p_tags = dict(
+        groupby(sorted(tags.get("#p", []), key=lambda p: p[0]), lambda p: p[0])
+    )
+    print("@" * 100)
+    print(tags)
+    print("#" * 100)
+    print(event_e_tags)
+    print("#" * 100)
+    print(event_p_tags)
+    print("#" * 100)
     return [
         Event(
             **event,
             tags=[
-                *event_e_tags.get(event["id"], []),
-                *event_p_tags.get(event["id"], []),
+                *event_e_tags.get(event["id"], []),  # type: ignore
+                *event_p_tags.get(event["id"], []),  # type: ignore
             ],
         )
         for event in events
@@ -216,26 +244,28 @@ async def fetch_event(
         return None
 
     select_tags = prepare_select_statement(
-        ((E_TAG_TABLE_NAME, f) for f in E_TAG_FIELDS),
+        [(E_TAG_TABLE_NAME, f) for f in E_TAG_INSERT_FIELDS],
         as_names={"#e": "tag"},
-        ordering=("tag", *E_TAG_ORDERING),
+        ordering=(f"{E_TAG_TABLE_NAME}.associated_event", "tag", *E_TAG_ORDERING),
     )
     clause = prepare_equal_clause((E_TAG_TABLE_NAME, "associated_event"))
     e_query = create_runnable_query(select_tags, E_TAG_TABLE_NAME, clause)
 
     select_tags = prepare_select_statement(
-        ((P_TAG_TABLE_NAME, f) for f in P_TAG_FIELDS),
+        [(P_TAG_TABLE_NAME, f) for f in P_TAG_INSERT_FIELDS],
         as_names={"#p": "tag"},
-        ordering=("tag", *P_TAG_ORDERING),
+        ordering=(f"{P_TAG_TABLE_NAME}.associated_event", "tag", *P_TAG_ORDERING),
     )
     clause = prepare_equal_clause((P_TAG_TABLE_NAME, "associated_event"))
     p_query = create_runnable_query(select_tags, P_TAG_TABLE_NAME, clause)
 
-    q_results = await run_queries(
-        return_queries={"#e": (e_query, (event_id,)), "#p": (p_query, (event_id,))},
-        conn=conn,
+    tags = cast(
+        dict[str, Iterable[E_Tag | P_Tag]],
+        await run_queries(
+            return_queries={"#e": (e_query, (event_id,)), "#p": (p_query, (event_id,))},
+            data_converters={"#e": db_to_e_tag, "#p": db_to_p_tag},
+            conn=conn,
+        ),
     )
-    e_tag_rows = cast(tuple[ETagRow], q_results.get("#e", tuple()))
-    p_tag_rows = cast(tuple[PTagRow], q_results.get("#p", tuple()))
 
-    return Event(**events[0], tags=[*e_tag_rows, *p_tag_rows])  # type: ignore
+    return Event(**events[0], tags=[*tags.get("#e", []), *tags.get("#p", [])])
