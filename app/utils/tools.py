@@ -1,12 +1,11 @@
-from typing import Callable, Hashable, Iterable, TypeVar
-
+from typing import Awaitable, Callable, Hashable, Iterable, Type, TypeVar
 
 T = TypeVar("T")
 _K = TypeVar("_K", bound=Hashable)
 
 
-def flat_list(l: Iterable[Iterable[T]]) -> list[T]:
-    return [a for sl in l for a in sl]
+def flat_list(arr: Iterable[Iterable[T]]) -> list[T]:
+    return [a for sl in arr for a in sl]
 
 
 def group_by(arr: list[T], key_getter: Callable[[T], _K], /) -> dict[_K, list[T]]:
@@ -17,3 +16,11 @@ def group_by(arr: list[T], key_getter: Callable[[T], _K], /) -> dict[_K, list[T]
         group.append(item)
         grouped_items[key] = group
     return grouped_items
+
+
+async def surpress_exc_coroutine(coro: Awaitable[T], exc: Type[BaseException]) -> T | None:
+    try:
+        return await coro
+    except exc:
+        pass
+    return None

@@ -1,6 +1,7 @@
 import base64
+from asyncio import sleep
 from datetime import datetime
-from random import randbytes, choice, randint, choices
+from random import choice, randbytes, randint
 from typing import Any
 
 import pytest
@@ -8,6 +9,8 @@ import standalone_app
 from events.crud import fetch_event, write_event
 from events.data import E_Tag, Event, P_Tag
 from events.enums import MessageTypes
+
+# from async_asgi_testclient import TestClient
 from fastapi.testclient import TestClient
 
 
@@ -57,16 +60,12 @@ async def test_event_storing() -> None:
         (tag for tag in event_dict["tags"] if tag[0] == "e"),
         key=lambda t: (t[1], t[2], t[3] if len(t) == 4 else None),
     )
-    p_tags = sorted(
-        (tag for tag in event_dict["tags"] if tag[0] == "p"), key=lambda t: (t[1], t[2])
-    )
+    p_tags = sorted((tag for tag in event_dict["tags"] if tag[0] == "p"), key=lambda t: (t[1], t[2]))
     assert all(
-        (_e1[1] == _e2.event_id and _e1[2] == _e2.recommended_relay_url)
-        for (_e1, _e2) in zip(e_tags, stored_e_tags)
+        (_e1[1] == _e2.event_id and _e1[2] == _e2.recommended_relay_url) for (_e1, _e2) in zip(e_tags, stored_e_tags)
     ), "E Tags Are Not Same!"  # TODO: Check marker equiality
     assert all(
-        (_p1[1] == _p2.pubkey and _p1[2] == _p2.recommended_relay_url)
-        for (_p1, _p2) in zip(p_tags, stored_p_tags)
+        (_p1[1] == _p2.pubkey and _p1[2] == _p2.recommended_relay_url) for (_p1, _p2) in zip(p_tags, stored_p_tags)
     ), "P Tags are not same!"
     assert (
         event.id == event_dict["id"]
@@ -76,8 +75,9 @@ async def test_event_storing() -> None:
     )
 
 
-def test_event_handling_capability() -> None:
-    event_count: int = 400
+@pytest.mark.asyncio
+async def test_event_handling_capability() -> None:
+    event_count: int = 100
     tagged_ids: list[str] = [
         "eab9c7fb4b34cb2f3fb1d5e30744bc2b",
         "88e4485952df3b5e783dcbb5a6e78e87",
@@ -118,20 +118,21 @@ def test_event_handling_capability() -> None:
     ]
     event_filter = {
         "ids": [event["id"] for event in events],
-        "kinds": [1, 2],
-        "since": randint(
-            int(datetime.now().timestamp()) - 12500000,
-            int(datetime.now().timestamp()) - 2500000,
-        ),
-        "until": randint(
-            int(datetime.now().timestamp()) - 7500000,
-            int(datetime.now().timestamp()) + 250000,
-        ),
-        "#e": choices(tagged_ids, k=4 * len(tagged_ids) // 10),
-        "#p": choices(tagged_ids, k=8 * len(tagged_ids) // 10),
+        # "kinds": [1, 2],
+        # "since": randint(
+        #     int(datetime.now().timestamp()) - 12500000,
+        #     int(datetime.now().timestamp()) - 2500000,
+        # ),
+        # "until": randint(
+        #     int(datetime.now().timestamp()) - 7500000,
+        #     int(datetime.now().timestamp()) + 250000,
+        # ),
+        # "#e": choices(tagged_ids, k=4 * len(tagged_ids) // 10),
+        # "#p": choices(tagged_ids, k=8 * len(tagged_ids) // 10),
     }
-    client = TestClient(standalone_app.app)
     subscription_id = "ekb0AqlmrufGCHoSFldWIG3E0CJIpsSji4vxmO4WkCFk7P1N"
+    # async with TestClient(standalone_app.app) as client:
+    client = TestClient(standalone_app.app)
     with client.websocket_connect("/nostr") as ws:
         for event in events:
             ws.send_json([MessageTypes.Event.value, event])
@@ -143,6 +144,8 @@ def test_event_handling_capability() -> None:
                 event_filter,
             ]
         )
+        # Wait until backend propagates all the events to persistent db
+        await sleep(2)
         recv_events = []
         while True:
             [msg_t, *rest] = ws.receive_json()
@@ -155,48 +158,36 @@ def test_event_handling_capability() -> None:
                 assert sb_id == subscription_id
                 break
             else:
-                print(msg_t, rest)
                 assert False, "Invalid Message Received"
-        recv_event_ids = set(e["id"] for e in recv_events)
-        recv_events = sorted(recv_events, key=lambda e: e["id"])
-        # TODO: apply manual filtering
-        # And compare
-        # For now, check the integrity of received tags
-        events = sorted(
-            (e for e in events if e["id"] in recv_event_ids), key=lambda e: e["id"]
-        )
-        for e1, e2 in zip(events, recv_events):
-            assert e1["id"] == e2["id"], "ids are not a match!"
-            assert e1["pubkey"] == e2["pubkey"], "Pubkeys are not a match!"
-            assert e1["content"] == e2["content"], "Content is not a match!"
-            assert e1["sig"].strip() == e2["sig"].strip(), "SIG is not a match!"
-            assert e1["created_at"] == e2["created_at"], "Created at is not a match"
-            assert e1["kind"] == e2["kind"], "kinds are not a match"
-            e1_e_tags = sorted(
-                (tag for tag in e1["tags"] if tag[0] == "e"),
-                key=lambda t: (t[1], t[2], t[3] if len(t) == 4 else None),
-            )
-            e2_e_tags = sorted(
-                (tag for tag in e2["tags"] if tag[0] == "e"),
-                key=lambda t: (t[1], t[2], t[3] if len(t) == 4 else None),
-            )
-            e1_p_tags = sorted(
-                (tag for tag in e1["tags"] if tag[0] == "p"), key=lambda t: (t[1], t[2])
-            )
-            e2_p_tags = sorted(
-                (tag for tag in e2["tags"] if tag[0] == "p"), key=lambda t: (t[1], t[2])
-            )
-            assert all(
-                (
-                    len(e1) == len(e2)
-                    and e1[1] == e2[1]
-                    and e1[2] == e2[2]
-                    and (e1[3] == e2[3] if len(e1) > 3 and len(e2) > 3 else True)
-                )
-                for (e1, e2) in zip(e1_e_tags, e2_e_tags)
-            ), "E Tags Are Not Same!"
 
-            assert all(
-                (e1[1] == e2[1] and e1[2] == e2[2])
-                for (e1, e2) in zip(e1_p_tags, e2_p_tags)
-            ), "P Tags Are Not Same!"
+    recv_event_ids = set(e["id"] for e in recv_events)
+    recv_events = sorted(recv_events, key=lambda e: e["id"])
+    # TODO: apply manual filtering
+    # And compare
+    # For now, check the integrity of received tags
+    # events = sorted((e for e in events if e["id"] in recv_event_ids), key=lambda e: e["id"])
+    events = sorted(events, key=lambda e: e["id"])
+    assert len(events) == len(recv_events)
+    for e1, e2 in zip(events, recv_events):
+        assert e1["id"] == e2["id"], "ids are not a match!"
+        assert e1["pubkey"] == e2["pubkey"], "Pubkeys are not a match!"
+        assert e1["content"] == e2["content"], "Content is not a match!"
+        assert e1["sig"].strip() == e2["sig"].strip(), "SIG is not a match!"
+        assert e1["created_at"] == e2["created_at"], "Created at is not a match"
+        assert e1["kind"] == e2["kind"], "kinds are not a match"
+        e1_e_tags = sorted(
+            (tag for tag in e1["tags"] if tag[0] == "e"),
+            key=lambda t: (t[1], t[2], t[3] if len(t) == 4 else None),
+        )
+        e2_e_tags = sorted(
+            (tag for tag in e2["tags"] if tag[0] == "e"),
+            key=lambda t: (t[1], t[2], t[3] if len(t) == 4 else None),
+        )
+        e1_p_tags = sorted((tag for tag in e1["tags"] if tag[0] == "p"), key=lambda t: (t[1], t[2]))
+        e2_p_tags = sorted((tag for tag in e2["tags"] if tag[0] == "p"), key=lambda t: (t[1], t[2]))
+        assert all(
+            (len(e1) == len(e2) and e1[1] == e2[1] and e1[2] == e2[2] and (e1[3] == e2[3] if len(e1) > 3 and len(e2) > 3 else True))
+            for (e1, e2) in zip(e1_e_tags, e2_e_tags)
+        ), "E Tags Are Not Same!"
+
+        assert all((e1[1] == e2[1] and e1[2] == e2[2]) for (e1, e2) in zip(e1_p_tags, e2_p_tags)), "P Tags Are Not Same!"

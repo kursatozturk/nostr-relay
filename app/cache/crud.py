@@ -1,18 +1,20 @@
+from asyncio import CancelledError
 from collections import deque
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Sequence, TypedDict
-from .typings import CacherConnectionType
 
-from cache.core import connect_to_redis
+from cache.core import get_redis_connection
+
+from .typings import CacherConnectionType
 
 
 async def add_vals_to_set(key: str, *val: int | float | str) -> int:
-    r = connect_to_redis()
+    r = get_redis_connection()
     return await r.sadd(key, *val)
 
 
 async def fetch_vals(name: str) -> Sequence[str]:
-    r = connect_to_redis()
+    r = get_redis_connection()
     cur, vals = await r.sscan(name=name)
     values: deque[str] = deque(vals)
     while cur:
@@ -29,8 +31,8 @@ class RedisResponse(TypedDict):
 
 
 @asynccontextmanager
-async def listen_on_key(key: str, *, r_conn: CacherConnectionType | None = None) ->AsyncIterator[AsyncIterator[RedisResponse]]:
-    r = r_conn or connect_to_redis()
+async def listen_on_key(key: str, *, r_conn: CacherConnectionType | None = None) -> AsyncIterator[AsyncIterator[RedisResponse]]:
+    r = r_conn or get_redis_connection()
     try:
         ps = r.pubsub()
         await ps.subscribe(key)
@@ -40,11 +42,6 @@ async def listen_on_key(key: str, *, r_conn: CacherConnectionType | None = None)
         await ps.close()
 
 
-
 async def broadcast(key: str, value: str, *, r_conn: CacherConnectionType | None = None):
-    r = r_conn or connect_to_redis()
-    try:
-        await r.publish(key, value)
-    except Exception as e:
-        print(e)
-        return
+    r = r_conn or get_redis_connection()
+    await r.publish(key, value)

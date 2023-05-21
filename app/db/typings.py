@@ -1,4 +1,4 @@
-from typing import Iterable, TypeAlias
+from typing import TypeAlias
 
 from psycopg import AsyncConnection, sql
 from psycopg_pool import AsyncConnectionPool

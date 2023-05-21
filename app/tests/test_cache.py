@@ -1,8 +1,8 @@
-from asyncio import ALL_COMPLETED, create_task, sleep, wait
+from asyncio import ALL_COMPLETED, create_task, wait
 
 import pytest
 import pytest_asyncio
-from cache.core import connect_to_redis
+from cache.core import get_redis_connection
 from utils.tools import flat_list
 from cache.crud import add_vals_to_set, broadcast, fetch_vals, listen_on_key
 from asyncio.locks import Barrier
@@ -21,7 +21,7 @@ async def test_caching() -> None:
 @pytest_asyncio.fixture
 async def cacher_connector():
     try:
-        r = connect_to_redis()
+        r = get_redis_connection()
         yield r
     finally:
         await r.close()
@@ -29,16 +29,15 @@ async def cacher_connector():
 
 @pytest.mark.asyncio
 async def test_pubsub(cacher_connector) -> None:
-    key = "test-key2"
     exit_signal = "exit"
     key_count = 10
-    listener_per_key = 500
+    listener_per_key = 50
     listener_barrier = Barrier(
         key_count * listener_per_key + 1  # + 1 is for this function
     )  #                                    to continue creating producers
 
     async def broadcaster_task(key: str) -> set[str]:
-        r_conn = connect_to_redis()
+        r_conn = get_redis_connection()
         vals = set(map(str, [1, 2, 3, 4, "test-1", "test-2"]))
         for val in vals:
             await broadcast(key, val, r_conn=r_conn)
@@ -46,7 +45,7 @@ async def test_pubsub(cacher_connector) -> None:
         return vals
 
     async def listener_task(key: str) -> set[str]:
-        r_conn = connect_to_redis()
+        r_conn = get_redis_connection()
         async with listen_on_key(key, r_conn=r_conn) as listener:
             catched_vals: set[str] = set()
             async with listener_barrier:

@@ -1,8 +1,9 @@
 import json
+from asyncio import CancelledError
 
+from cache.core import get_redis_connection
 from cache.crud import listen_on_key
 from events.crud import filter_events
-from events.data import Event
 from events.enums import MessageTypes
 from events.filters import EventFilterer, Filters
 from events.typings import EventNostrDict
@@ -13,29 +14,40 @@ from utils.errors import ErrorTypes, InvalidMessageError
 NEW_EVENT_KEY = "events"
 
 
-async def create_listener(
-    *filters: Filters, ws: WebSocket, subscription_id: str
-) -> None:
+async def create_listener(*filters: Filters, ws: WebSocket, subscription_id: str) -> None:
     event_filterer = EventFilterer(*filters)
-    async with listen_on_key(NEW_EVENT_KEY) as listener:
-        print(listener)
+    r_conn = get_redis_connection()
+    async with listen_on_key(NEW_EVENT_KEY, r_conn=r_conn) as listener:
         async for event_str in listener:
-            print(event_str, flush=True)
             if event_str["type"] == "message":
                 event: EventNostrDict = json.loads(event_str["data"])
                 if event_filterer.test_event(event):
-                    print('Tested! sending')
                     await ws.send_json([MessageTypes.Event.value, subscription_id, event])
+    await r_conn.close()
 
 
-async def handle_received_req(*filters_dicts: dict) -> tuple[list[Event], list[Filters]]:
+async def handle_received_req(ws: WebSocket, subs_id: str, filters: list[Filters]) -> None:
     try:
-        filters = [Filters(**filters_dict) for filters_dict in filters_dicts]
+        # filters = [Filters(**filters_dict) for filters_dict in filters_dicts]
         events = await filter_events(*filters)
-        return events, filters
+        for event in events:
+            await ws.send_json(
+                [
+                    MessageTypes.Event.value,
+                    subs_id,
+                    event.nostr_dict,
+                ]
+            )
+        await ws.send_json([MessageTypes.Eose.value, subs_id])
+
+        # return events, filters
     except ValidationError as exc:
         raise InvalidMessageError(
             "Invalid Filters!",
             error_type=ErrorTypes.validation_error,
             encapsulated_exc=exc,
         )
+    except CancelledError as cancel:
+        print(cancel)
+        print("AAAAAAAAAAAAAAAAAAAAAAAAAA" * 100)
+        pass

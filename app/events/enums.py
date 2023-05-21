@@ -6,3 +6,4 @@ class MessageTypes(Enum):
     Req = "REQ"
     Close = "CLOSE"
     Eose = "EOSE"
+    Notice = "NOTICE"

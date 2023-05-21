@@ -39,19 +39,22 @@ def test_event_filtering() -> None:
     event = Event(**event_dict)
     event_nostr = event.nostr_dict
 
-    filters = Filters(ids=[event_dict["id"][:14]])
-    filterer = EventFilterer(filters)
+    filters_1 = Filters(ids=[event_dict["id"][:14]]) # one pases
+    filters_2 = Filters(ids=[event_dict["id"][10:]]) # one not but combination should allow it
+    filterer = EventFilterer(filters_1, filters_2)
     assert filterer.test_event(event_nostr), "Event Id filtering is not working!"
 
     filters = Filters(ids=[randbytes(16).hex()[:25]])
     filterer = EventFilterer(filters)
     assert not filterer.test_event(event_nostr), "Event Id filtering is not working!"
 
-    filters = Filters(
+    filters_e = Filters(
         **{"#e": [t[1] for t in event_dict["tags"] if t[0] == "e"][:1]},  # type: ignore
+    )
+    filters_p = Filters(
         **{"#p": [t[1] for t in event_dict["tags"] if t[0] == "p"][:1]},  # type: ignore
     )
-    filterer = EventFilterer(filters)
+    filterer = EventFilterer(filters_e, filters_p)
     assert filterer.test_event(event_nostr), "Tag filtering is not working!"
 
     filters = Filters(
@@ -69,15 +72,11 @@ def test_event_filtering() -> None:
     filterer = EventFilterer(filters)
     assert not filterer.test_event(event_nostr), "Authors filtering not working!"
 
-    filters = Filters(
-        since=event_dict["created_at"] - 10, until=event_dict["created_at"] + 10
-    )
+    filters = Filters(since=event_dict["created_at"] - 10, until=event_dict["created_at"] + 10)
     filterer = EventFilterer(filters)
     assert filterer.test_event(event_nostr), "Since/Until filtering not working!"
 
-    filters = Filters(
-        since=event_dict["created_at"] + 10, until=event_dict["created_at"] + 20
-    )
+    filters = Filters(since=event_dict["created_at"] + 10, until=event_dict["created_at"] + 20)
     filterer = EventFilterer(filters)
     assert not filterer.test_event(event_nostr), "Since/Until filtering not working!"
 

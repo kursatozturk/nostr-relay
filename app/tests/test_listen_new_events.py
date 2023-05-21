@@ -1,15 +1,13 @@
 import base64
-from asyncio import ALL_COMPLETED, Barrier, Condition, create_task, wait
+from asyncio import ALL_COMPLETED, Barrier, create_task, wait
 from datetime import datetime
 from random import choice, randbytes, randint
-from typing import AsyncGenerator
 
 import pytest
 import standalone_app
 from async_asgi_testclient import TestClient
 from events.enums import MessageTypes
 from events.typings import EventNostrDict
-
 
 @pytest.mark.asyncio
 async def test_new_event_catcher() -> None:
@@ -38,25 +36,18 @@ async def test_new_event_catcher() -> None:
                 )
                 # Consume the stored events
                 while True:
-                    print("Consuming the events")
                     [msg_t, *t] = await ws.receive_json()
-                    print(msg_t, t, flush=True)
                     if msg_t == MessageTypes.Eose.value:
                         break
                 trials = 0
                 await barrier.wait()
                 while True:
-                    print("Receiving new events!")
                     try:
                         [msg_t, *rest] = await ws.receive_json()
                         trials = 0
                         if msg_t == MessageTypes.Event.value:
                             sb_id, event_det = rest
-                            assert (
-                                msg_t == MessageTypes.Event.value
-                                and sb_id == subscription_id
-                            ), "SubscriptionId Error"
-                            print(f'Event Received: {event_det["id"]}')
+                            assert msg_t == MessageTypes.Event.value and sb_id == subscription_id, "SubscriptionId Error"
                             recv_events.append(event_det)
                             recv_count += 1
                             if recv_count == event_count:
@@ -66,13 +57,8 @@ async def test_new_event_catcher() -> None:
                             assert sb_id == subscription_id
                             break
                         else:
-                            print(msg_t, rest)
-                            print("AMAN AMAAAAN NERELERE DUSTUK HAANIMM")
-                            # assert False, "Invalid Message Received"
-                    except Exception as e:
-                        print("------" * 100)
-                        print(e, f"{e!r}", f"{e!s}")
-                        print("#@_@#" * 100)
+                            assert False, "Invalid Message Received"
+                    except Exception:
                         trials += 1
                         if trials == 5:
                             break
@@ -118,10 +104,8 @@ async def test_new_event_catcher() -> None:
                 }
                 for _ in range(event_count)
             ]
-            print("AAAAAAAAAAAA", flush=True)
             async with client.websocket_connect("/nostr") as ws:
                 for event in events:
-                    print(f'Event sent: {event["id"]}', flush=True)
                     await ws.send_json([MessageTypes.Event.value, event])
         return events
 
@@ -170,7 +154,4 @@ async def test_new_event_catcher() -> None:
             for (e1, e2) in zip(e1_e_tags, e2_e_tags)
         ), "E Tags Are Not Same!"
 
-        assert all(
-            (e1[1] == e2[1] and e1[2] == e2[2])
-            for (e1, e2) in zip(e1_p_tags, e2_p_tags)
-        ), "P Tags Are Not Same!"
+        assert all((e1[1] == e2[1] and e1[2] == e2[2]) for (e1, e2) in zip(e1_p_tags, e2_p_tags)), "P Tags Are Not Same!"
