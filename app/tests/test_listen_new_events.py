@@ -1,5 +1,5 @@
 import base64
-from asyncio import ALL_COMPLETED, create_task, wait
+from asyncio import ALL_COMPLETED, Barrier, Condition, create_task, wait
 from datetime import datetime
 from random import choice, randbytes, randint
 from typing import AsyncGenerator
@@ -22,8 +22,9 @@ async def test_new_event_catcher() -> None:
         "#e": [filtered_e_tag],
         "#p": [filtered_p_tag],
     }
+    barrier = Barrier(2)
 
-    async def listen_new_events() -> AsyncGenerator[list[EventNostrDict], None]:
+    async def listen_new_events() -> list[EventNostrDict]:
         recv_events: list[EventNostrDict] = []
         recv_count = 0
         async with TestClient(standalone_app.app) as client:
@@ -43,7 +44,7 @@ async def test_new_event_catcher() -> None:
                     if msg_t == MessageTypes.Eose.value:
                         break
                 trials = 0
-                yield []
+                await barrier.wait()
                 while True:
                     print("Receiving new events!")
                     try:
@@ -75,7 +76,7 @@ async def test_new_event_catcher() -> None:
                         trials += 1
                         if trials == 5:
                             break
-        yield recv_events
+        return recv_events
 
     async def produce_new_events() -> list[EventNostrDict]:
         tagged_ids: list[str] = [
@@ -124,15 +125,9 @@ async def test_new_event_catcher() -> None:
                     await ws.send_json([MessageTypes.Event.value, event])
         return events
 
-    listener = listen_new_events()
-
-    # Conume the filter events
-    await anext(listener)
-
-    async def l():
-        return await anext(listener)
-
-    receiver = create_task(l(), name="Listener")
+    receiver = create_task(listen_new_events(), name="Listener")
+    # Conume the filtered events
+    await barrier.wait()
     producer = create_task(
         produce_new_events(),
         name="Producer",

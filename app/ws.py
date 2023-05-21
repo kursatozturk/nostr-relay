@@ -1,3 +1,4 @@
+from typing import Any
 from events.enums import MessageTypes
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from message_handlers.event import handle_received_event
@@ -11,7 +12,7 @@ INVALID_MESSAGE = {"Error": "invalid_message"}
 
 
 @nostr.websocket("/nostr", name="Nostr Ws")
-async def nostr_server(websocket: WebSocket):
+async def nostr_server(websocket: WebSocket) -> Any:
     await websocket.accept()
     bg_tasks: list[Task] = []
     try:
@@ -19,14 +20,14 @@ async def nostr_server(websocket: WebSocket):
             data = await websocket.receive_json()
             try:
                 match data:
-                    case [MessageTypes.Event.value, dict() as event_dict]:
+                    case [MessageTypes.Event.value, event_dict]:
                         await handle_received_event(event_dict)
                     case [
                         MessageTypes.Req.value,
                         str() as subscription_id,
-                        dict() as fltrs_dict,
+                        *filters_dicts,
                     ]:
-                        events, filters = await handle_received_req(fltrs_dict)
+                        events, filters = await handle_received_req(*filters_dicts)
                         for event in events:
                             await websocket.send_json(
                                 [
@@ -39,7 +40,7 @@ async def nostr_server(websocket: WebSocket):
                             [MessageTypes.Eose.value, subscription_id]
                         )
                         task = create_task(
-                            create_listener(websocket, filters, subscription_id)
+                            create_listener(*filters, ws=websocket, subscription_id=subscription_id)
                         )
                         bg_tasks.append(task)
 

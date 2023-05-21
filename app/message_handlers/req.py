@@ -14,12 +14,11 @@ NEW_EVENT_KEY = "events"
 
 
 async def create_listener(
-    ws: WebSocket, filters: Filters, subscription_id: str
+    *filters: Filters, ws: WebSocket, subscription_id: str
 ) -> None:
-    event_filterer = EventFilterer(filters)
+    event_filterer = EventFilterer(*filters)
     async with listen_on_key(NEW_EVENT_KEY) as listener:
         print(listener)
-        print(event_filterer._filters.json())
         async for event_str in listener:
             print(event_str, flush=True)
             if event_str["type"] == "message":
@@ -29,10 +28,10 @@ async def create_listener(
                     await ws.send_json([MessageTypes.Event.value, subscription_id, event])
 
 
-async def handle_received_req(filters_dict: dict) -> tuple[list[Event], Filters]:
+async def handle_received_req(*filters_dicts: dict) -> tuple[list[Event], list[Filters]]:
     try:
-        filters = Filters(**filters_dict)
-        events = await filter_events(filters)
+        filters = [Filters(**filters_dict) for filters_dict in filters_dicts]
+        events = await filter_events(*filters)
         return events, filters
     except ValidationError as exc:
         raise InvalidMessageError(

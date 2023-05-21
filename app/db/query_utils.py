@@ -136,7 +136,7 @@ def prepare_lte_gte_clause(
 ) -> QueryComponents:
     gte_template = sql.SQL("{field_name} >= {value}")
     lte_template = sql.SQL("{field_name} <= {value}")
-    clauses: list[sql.Composable] = []
+    clauses: list[QueryComponents] = []
 
     if type(field_name) is str:
         fnames: tuple[str, ...] = (field_name,)
@@ -182,4 +182,10 @@ def prepare_insert_into(
         table_name=sql.Identifier(table_name),
         field_names=sql.SQL(",").join(fnames),
         values=values,
+    )
+
+def combine_or_clauses( *clauses: QueryComponents) -> QueryComponents:
+    template = sql.SQL('({or_clauses})')
+    return template.format(
+        or_clauses=sql.SQL(' or ').join(clauses)
     )

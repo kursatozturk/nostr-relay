@@ -2,6 +2,8 @@ from collections import deque
 from contextlib import _AsyncGeneratorContextManager
 from itertools import groupby
 from typing import Any, Iterable, TypedDict, cast
+from db.query_utils import combine_or_clauses
+from db.typings import QueryComponents
 
 from db.query import run_queries
 from db.query_utils import (
@@ -84,73 +86,76 @@ async def write_event(event: Event) -> None:
 
 
 async def filter_events(
-    filters: Filters,
-    *,
+    *filters: Filters,
     conn: _AsyncGeneratorContextManager[AsyncConnection[Any]] | None = None,
 ) -> list[Event]:
     filter_queue: deque = deque()
     values: list[str | int | float] = []
-    if filters.ids:
-        id_filter = prepare_prefix_clause(
-            (EVENT_TABLE_NAME, "id"), prefixes=filters.ids
-        )
+    if fids := flat_list(f.ids for f in filters if f.ids):
+        id_filter = prepare_prefix_clause((EVENT_TABLE_NAME, "id"), prefixes=fids)
         filter_queue.append(id_filter)
 
-    if filters.authors:
+    if fauthors := flat_list(f.authors for f in filters if f.authors):
         author_filter = prepare_prefix_clause(
-            (EVENT_TABLE_NAME, "pubkey"), prefix_count=len(filters.authors)
+            (EVENT_TABLE_NAME, "pubkey"), prefix_count=len(fauthors)
         )
         filter_queue.append(author_filter)
-        values.extend(filters.authors)
+        values.extend(fauthors)
 
-    if filters.kinds:
+    if fkinds := flat_list(f.kinds for f in filters if f.kinds):
         kind_filter = prepare_in_clause(
-            (EVENT_TABLE_NAME, "kind"), value_count=len(filters.kinds)
+            (EVENT_TABLE_NAME, "kind"), value_count=len(fkinds)
         )
         filter_queue.append(kind_filter)
-        values.extend(str(k) for k in filters.kinds)
+        values.extend(map(str, fkinds))
 
-    if filters.since or filters.until:
-        btwn_filter = prepare_lte_gte_clause(
-            (EVENT_TABLE_NAME, "created_at"),
-            gte=filters.since is not None,
-            lte=filters.until is not None,
-        )
-        filter_queue.append(btwn_filter)
-        if filters.since:
-            values.append(filters.since)
-        if filters.until:
-            values.append(filters.until)
+    if created_at_fs := [(f.since, f.until) for f in filters if (f.since or f.until)]:
+            c_values: list[float | int] = []
+            clauses: list[QueryComponents] = []
+            for since, until in created_at_fs:
+                btwn_filter = prepare_lte_gte_clause(
+                    (EVENT_TABLE_NAME, "created_at"),
+                    gte=since is not None,
+                    lte=until is not None,
+                )
+                clauses.append(btwn_filter)
+                if since:
+                    c_values.append(since)
+                if until:
+                    c_values.append(until)
 
-    if filters.e_tag and len(filters.e_tag):
+            filter_queue.append(combine_or_clauses(*clauses))
+            values.extend(c_values)
+
+    if f_e_tags := flat_list(f.e_tag for f in filters if f.e_tag):
         # Prepare e_tag query
         e_tag_select = prepare_select_statement(
             [(E_TAG_TABLE_NAME, "associated_event")]
         )
         e_tag_in_clause = prepare_in_clause(
-            (E_TAG_TABLE_NAME, "event_id"), len(filters.e_tag)
+            (E_TAG_TABLE_NAME, "event_id"), len(f_e_tags)
         )
         q = create_runnable_query(e_tag_select, E_TAG_TABLE_NAME, e_tag_in_clause)
 
         # now use the result of the q to have "IN" clause
         e_tag_filter = prepare_in_clause((EVENT_TABLE_NAME, "id"), q=q)
         filter_queue.append(e_tag_filter)
-        values.extend(filters.e_tag)
+        values.extend(f_e_tags)
 
-    if filters.p_tag and len(filters.p_tag):
+    if f_p_tags := flat_list(f.p_tag for f in filters if f.p_tag):
         # Prepare p_tag query
         p_tag_select = prepare_select_statement(
             [(P_TAG_TABLE_NAME, "associated_event")]
         )
         p_tag_in_clause = prepare_in_clause(
-            (P_TAG_TABLE_NAME, "pubkey"), len(filters.p_tag)
+            (P_TAG_TABLE_NAME, "pubkey"), len(f_p_tags)
         )
         q = create_runnable_query(p_tag_select, P_TAG_TABLE_NAME, p_tag_in_clause)
 
         # now use the result of the q to have "IN" clause
         p_tag_filter = prepare_in_clause((EVENT_TABLE_NAME, "id"), q=q)
         filter_queue.append(p_tag_filter)
-        values.extend(filters.p_tag)
+        values.extend(f_p_tags)
 
     select_statement = prepare_select_statement(
         ((EVENT_TABLE_NAME, f) for f in EVENT_FIELDS)

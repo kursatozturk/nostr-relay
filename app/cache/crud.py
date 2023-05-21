@@ -1,6 +1,7 @@
 from collections import deque
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Sequence, TypedDict
+from .typings import CacherConnectionType
 
 from cache.core import connect_to_redis
 
@@ -28,8 +29,8 @@ class RedisResponse(TypedDict):
 
 
 @asynccontextmanager
-async def listen_on_key(key: str) ->AsyncIterator[AsyncIterator[RedisResponse]]:
-    r = connect_to_redis()
+async def listen_on_key(key: str, *, r_conn: CacherConnectionType | None = None) ->AsyncIterator[AsyncIterator[RedisResponse]]:
+    r = r_conn or connect_to_redis()
     try:
         ps = r.pubsub()
         await ps.subscribe(key)
@@ -39,8 +40,9 @@ async def listen_on_key(key: str) ->AsyncIterator[AsyncIterator[RedisResponse]]:
         await ps.close()
 
 
-async def broadcast(key: str, value: str):
-    r = connect_to_redis()
+
+async def broadcast(key: str, value: str, *, r_conn: CacherConnectionType | None = None):
+    r = r_conn or connect_to_redis()
     try:
         await r.publish(key, value)
     except Exception as e:
