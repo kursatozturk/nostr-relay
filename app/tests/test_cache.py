@@ -20,8 +20,8 @@ async def test_caching() -> None:
 
 @pytest_asyncio.fixture
 async def cacher_connector():
+    r = get_redis_connection()
     try:
-        r = get_redis_connection()
         yield r
     finally:
         await r.close()

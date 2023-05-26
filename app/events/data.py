@@ -1,11 +1,15 @@
 import json
 from functools import cached_property
-from typing import cast
 
-from events.typings import ETagRow, KindType, MarkedETagRow, PTagRow
 from pydantic import Field, validator
 from tags import E_Tag, P_Tag
+from tags.data import Tag
+from tags.db.e_tag import E_TAG_TAG_NAME
+from tags.db.p_tag import P_TAG_TAG_NAME
+from tags.typings import ETagRow, PTagRow
 from utils.models import NostrModel
+
+from events.typings import EventNostrDict, KindType
 
 
 class Event(NostrModel):
@@ -13,7 +17,7 @@ class Event(NostrModel):
     pubkey: str  # 32-bytes lowercase hex-encoded public key of the event creator
     created_at: int  # unix timestamp in seconds
     kind: KindType
-    tags: list[E_Tag | P_Tag] = Field(default_factory=list)
+    tags: list[Tag] = Field(default_factory=list)
     content: str
     sig: str  # 64-bytes hex of the signature of the sha256 hash of the serialized event data, which is the same as the "id" field
 
@@ -22,22 +26,20 @@ class Event(NostrModel):
         if isinstance(tag_data, E_Tag) or isinstance(tag_data, P_Tag):
             return tag_data
         elif isinstance(tag_data, dict):
-            if tag_data["tag"] == "#e":
+            if tag_data["tag"] == E_TAG_TAG_NAME:
                 return E_Tag(**tag_data)
             else:
                 return P_Tag(**tag_data)
         else:
-            if tag_data[0] == "#e":
+            if tag_data[0] == E_TAG_TAG_NAME:
                 return E_Tag(
-                    tag="#e",
+                    tag=E_TAG_TAG_NAME,
                     event_id=tag_data[1],
                     recommended_relay_url=tag_data[2],
-                    marker=cast(MarkedETagRow, tag_data)[3] if len(tag_data) > 3 else None,
+                    marker=tag_data[3] if len(tag_data) == 4 else None,
                 )
-            elif tag_data[0] == "#p":
-                return P_Tag(
-                    tag="#p", pubkey=tag_data[1], recommended_relay_url=tag_data[2]
-                )
+            elif tag_data[0] == P_TAG_TAG_NAME:
+                return P_Tag(tag=P_TAG_TAG_NAME, pubkey=tag_data[1], recommended_relay_url=tag_data[2])
             else:
                 print(tag_data)
                 assert False
@@ -50,12 +52,10 @@ class Event(NostrModel):
         """
         Used to obtain id. (Note that it needs to be applied sha256 to obtain final id!)
         """
-        return json.dumps(
-            [0, self.pubkey, self.created_at, self.kind, self.tags, self.content]
-        )
+        return json.dumps([0, self.pubkey, self.created_at, self.kind, self.tags, self.content])
 
     @cached_property
-    def nostr_dict(self):
+    def nostr_dict(self) -> EventNostrDict:
         """
         Converts the data type to nostr protocol standards.
         """

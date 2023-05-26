@@ -7,11 +7,14 @@ from typing import Any
 import pytest
 import standalone_app
 from events.crud import fetch_event, write_event
-from events.data import E_Tag, Event, P_Tag
+from events.data import Event
 from events.enums import MessageTypes
 
 # from async_asgi_testclient import TestClient
 from fastapi.testclient import TestClient
+
+from tags.db.e_tag import E_TAG_TAG_NAME
+from tags.db.p_tag import P_TAG_TAG_NAME
 
 
 @pytest.mark.asyncio
@@ -33,12 +36,12 @@ async def test_event_storing() -> None:
         "created_at": 129312931,
         "kind": choice([1, 2]),
         "tags": [
-            ["#e", choice(tagged_ids), "asdla"],
-            ["#e", choice(tagged_ids), "nostr-relay.co"],
-            ["#p", choice(tagged_ids), "nostr-er-relay-co.co"],
-            ["#p", choice(tagged_ids), "carpenter-co.co"],
-            ["#e", choice(tagged_ids), "", "root"],
-            ["#p", choice(tagged_ids), "ws://nostr-tr.pub/v2"],
+            [E_TAG_TAG_NAME, choice(tagged_ids), "asdla"],
+            [E_TAG_TAG_NAME, choice(tagged_ids), "nostr-relay.co"],
+            [P_TAG_TAG_NAME, choice(tagged_ids), "nostr-er-relay-co.co"],
+            [P_TAG_TAG_NAME, choice(tagged_ids), "carpenter-co.co"],
+            [E_TAG_TAG_NAME, choice(tagged_ids), "", "root"],
+            [P_TAG_TAG_NAME, choice(tagged_ids), "ws://nostr-tr.pub/v2"],
         ],
         "content": "0tYbyhQ7cPcoNyaisCtQiouMbgd40njFBEGcdFaBJe1jCL6jlwgi6FISRrJlVHYmyAuNVpju0VIzeftk"
         "7mkj0KfJfzQ4vxWJUtwHb3DakQNt7Mt2LF5QwNev9dL0aLYSnrzXkpgChShNCjmUWwSOuwg5fcANNimEh9SDl2radme"
@@ -48,30 +51,22 @@ async def test_event_storing() -> None:
     await write_event(event=Event(**event_dict))
     event = await fetch_event(event_dict["id"])
     assert event is not None
-    stored_e_tags = sorted(
-        (tag for tag in event.tags if type(tag) is E_Tag),
-        key=lambda t: (t.event_id, t.recommended_relay_url, t.marker),
-    )
-    stored_p_tags = sorted(
-        (tag for tag in event.tags if type(tag) is P_Tag),
-        key=lambda t: (t.pubkey, t.recommended_relay_url),
-    )
+    stored_e_tags = sorted((tag for tag in (event["tags"] or []) if tag[0] == "e"))
+    stored_p_tags = sorted((tag for tag in (event["tags"] or []) if tag[0] == "p"))
     e_tags = sorted(
-        (tag for tag in event_dict["tags"] if tag[0] == "e"),
+        (tag for tag in event_dict["tags"] if tag[0] == E_TAG_TAG_NAME),
         key=lambda t: (t[1], t[2], t[3] if len(t) == 4 else None),
     )
-    p_tags = sorted((tag for tag in event_dict["tags"] if tag[0] == "p"), key=lambda t: (t[1], t[2]))
+    p_tags = sorted((tag for tag in event_dict["tags"] if tag[0] == P_TAG_TAG_NAME), key=lambda t: (t[1], t[2]))
     assert all(
-        (_e1[1] == _e2.event_id and _e1[2] == _e2.recommended_relay_url) for (_e1, _e2) in zip(e_tags, stored_e_tags)
+        (_e1[1] == _e2[1] and _e1[2] == _e2[2]) for (_e1, _e2) in zip(e_tags, stored_e_tags)
     ), "E Tags Are Not Same!"  # TODO: Check marker equiality
-    assert all(
-        (_p1[1] == _p2.pubkey and _p1[2] == _p2.recommended_relay_url) for (_p1, _p2) in zip(p_tags, stored_p_tags)
-    ), "P Tags are not same!"
+    assert all((_p1[1] == _p2[1] and _p1[2] == _p2[2]) for (_p1, _p2) in zip(p_tags, stored_p_tags)), "P Tags are not same!"
     assert (
-        event.id == event_dict["id"]
-        and event.pubkey == event_dict["pubkey"]
-        and event.content == event_dict["content"]
-        and event.sig == event_dict["sig"]
+        event["id"] == event_dict["id"]
+        and event["pubkey"] == event_dict["pubkey"]
+        and event["content"] == event_dict["content"]
+        and event["sig"] == event_dict["sig"]
     )
 
 
@@ -99,12 +94,12 @@ async def test_event_handling_capability() -> None:
             ),
             "kind": choice([1, 2]),
             "tags": [
-                ["#e", choice(tagged_ids), "asdla"],
-                ["#e", choice(tagged_ids), "nostr-relay.co"],
-                ["#p", choice(tagged_ids), "nostr-er-relay-co.co"],
-                ["#p", choice(tagged_ids), "carpenter-co.co"],
-                ["#e", choice(tagged_ids), "", "root"],
-                ["#p", choice(tagged_ids), "ws://nostr-tr.pub/v2"],
+                [E_TAG_TAG_NAME, choice(tagged_ids), "asdla"],
+                [E_TAG_TAG_NAME, choice(tagged_ids), "nostr-relay.co"],
+                [P_TAG_TAG_NAME, choice(tagged_ids), "nostr-er-relay-co.co"],
+                [P_TAG_TAG_NAME, choice(tagged_ids), "carpenter-co.co"],
+                [E_TAG_TAG_NAME, choice(tagged_ids), "", "root"],
+                [P_TAG_TAG_NAME, choice(tagged_ids), "ws://nostr-tr.pub/v2"],
             ],
             "content": "BJnEKLP7jPWr2V4uvvX24EgXvWArugLX6nFpk2SWC244Oq5FgQlEFl51yH6Pgz1ScePv9rpQ9wvDHnQF98Is"
             "VNJuKX6JW2IipZrP7BkUtYYtAZvZqRukWGzFGb3vZf22Nw4j7iIUJgHq0Z0OV3gQlOoSakd6wa4gKuFascSYvYE9IKRwG2VS"
@@ -127,8 +122,8 @@ async def test_event_handling_capability() -> None:
         #     int(datetime.now().timestamp()) - 7500000,
         #     int(datetime.now().timestamp()) + 250000,
         # ),
-        # "#e": choices(tagged_ids, k=4 * len(tagged_ids) // 10),
-        # "#p": choices(tagged_ids, k=8 * len(tagged_ids) // 10),
+        # E_TAG_TAG_NAME: choices(tagged_ids, k=4 * len(tagged_ids) // 10),
+        # P_TAG_TAG_NAME: choices(tagged_ids, k=8 * len(tagged_ids) // 10),
     }
     subscription_id = "ekb0AqlmrufGCHoSFldWIG3E0CJIpsSji4vxmO4WkCFk7P1N"
     # async with TestClient(standalone_app.app) as client:
@@ -160,7 +155,6 @@ async def test_event_handling_capability() -> None:
             else:
                 assert False, "Invalid Message Received"
 
-    recv_event_ids = set(e["id"] for e in recv_events)
     recv_events = sorted(recv_events, key=lambda e: e["id"])
     # TODO: apply manual filtering
     # And compare
@@ -176,15 +170,15 @@ async def test_event_handling_capability() -> None:
         assert e1["created_at"] == e2["created_at"], "Created at is not a match"
         assert e1["kind"] == e2["kind"], "kinds are not a match"
         e1_e_tags = sorted(
-            (tag for tag in e1["tags"] if tag[0] == "e"),
+            (tag for tag in e1["tags"] if tag[0] == E_TAG_TAG_NAME),
             key=lambda t: (t[1], t[2], t[3] if len(t) == 4 else None),
         )
         e2_e_tags = sorted(
-            (tag for tag in e2["tags"] if tag[0] == "e"),
+            (tag for tag in e2["tags"] if tag[0] == E_TAG_TAG_NAME),
             key=lambda t: (t[1], t[2], t[3] if len(t) == 4 else None),
         )
-        e1_p_tags = sorted((tag for tag in e1["tags"] if tag[0] == "p"), key=lambda t: (t[1], t[2]))
-        e2_p_tags = sorted((tag for tag in e2["tags"] if tag[0] == "p"), key=lambda t: (t[1], t[2]))
+        e1_p_tags = sorted((tag for tag in e1["tags"] if tag[0] == P_TAG_TAG_NAME), key=lambda t: (t[1], t[2]))
+        e2_p_tags = sorted((tag for tag in e2["tags"] if tag[0] == P_TAG_TAG_NAME), key=lambda t: (t[1], t[2]))
         assert all(
             (len(e1) == len(e2) and e1[1] == e2[1] and e1[2] == e2[2] and (e1[3] == e2[3] if len(e1) > 3 and len(e2) > 3 else True))
             for (e1, e2) in zip(e1_e_tags, e2_e_tags)

@@ -1,7 +1,6 @@
-from typing import Any, Callable, Iterable, Sequence, TypeVar, overload
+from typing import Callable, Sequence, TypeVar, overload
 
 
-from db.core import connect_db_pool
 from db.typings import DBConnection, RunnableQuery
 
 
@@ -10,7 +9,10 @@ def returnAsTuple(x: tuple) -> tuple:
 
 
 T = TypeVar("T")
-_K = TypeVar("_K", bound=Iterable[str])
+
+
+def ident(_: tuple) -> tuple:
+    return _
 
 
 @overload
@@ -19,7 +21,7 @@ async def run_queries(
     no_return_queries: Sequence[tuple[RunnableQuery, Sequence]],
     parallel: bool = False,
     conn: DBConnection,
-) -> None:
+) -> dict:
     ...
 
 
@@ -29,9 +31,9 @@ async def run_queries(
     no_return_queries: Sequence[tuple[RunnableQuery, Sequence]] = [],
     return_queries: dict[str, tuple[RunnableQuery, Sequence]],
     parallel: bool = False,
-    data_converters: dict[str, Callable[[tuple], Any]] = {},
+    data_converters: dict[str, Callable[[tuple], T]] = {"": ident},
     conn: DBConnection,
-) -> dict[str, tuple[tuple | Any, ...]]:
+) -> dict[str, tuple[T, ...]]:
     ...
 
 
@@ -39,10 +41,10 @@ async def run_queries(
     *,
     no_return_queries: Sequence[tuple[RunnableQuery, Sequence]] = [],
     return_queries: dict[str, tuple[RunnableQuery, Sequence]] = {},
-    data_converters: dict[str, Callable[[tuple], Any]] = {},
+    data_converters: dict[str, Callable[[tuple], T]] = {"": ident},
     parallel: bool = False,
     conn: DBConnection,
-) -> dict[str, tuple[tuple | Any, ...]] | None:
+) -> dict[str, tuple[T, ...]]:
     """
     Runs batches of queries.
     @PARAMETERS

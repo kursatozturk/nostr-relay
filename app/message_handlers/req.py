@@ -3,7 +3,7 @@ from asyncio import CancelledError
 
 from cache.core import get_redis_connection
 from cache.crud import listen_on_key
-from events.crud import filter_events
+from events.crud import query_events
 from events.enums import MessageTypes
 from events.filters import EventFilterer, Filters
 from events.typings import EventNostrDict
@@ -29,13 +29,13 @@ async def create_listener(*filters: Filters, ws: WebSocket, subscription_id: str
 async def handle_received_req(ws: WebSocket, subs_id: str, filters: list[Filters]) -> None:
     try:
         # filters = [Filters(**filters_dict) for filters_dict in filters_dicts]
-        events = await filter_events(*filters)
+        events = await query_events(*filters)
         for event in events:
             await ws.send_json(
                 [
                     MessageTypes.Event.value,
                     subs_id,
-                    event.nostr_dict,
+                    event,
                 ]
             )
         await ws.send_json([MessageTypes.Eose.value, subs_id])

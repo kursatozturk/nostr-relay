@@ -8,6 +8,9 @@ import standalone_app
 from async_asgi_testclient import TestClient
 from events.enums import MessageTypes
 from events.typings import EventNostrDict
+from tags.db.e_tag import E_TAG_TAG_NAME
+from tags.db.p_tag import P_TAG_TAG_NAME
+
 
 @pytest.mark.asyncio
 async def test_new_event_catcher() -> None:
@@ -87,12 +90,12 @@ async def test_new_event_catcher() -> None:
                     ),
                     "kind": choice([1, 2]),
                     "tags": [
-                        ("#e", filtered_e_tag, "asdla"),
-                        ("#p", filtered_p_tag, "nostr-er-relay-co.co"),
-                        ("#e", choice(tagged_ids), "nostr-relay.co"),
-                        ("#p", choice(tagged_ids), "carpenter-co.co"),
-                        ("#e", choice(tagged_ids), "", "root"),
-                        ("#p", choice(tagged_ids), "ws://nostr-tr.pub/v2"),
+                        (E_TAG_TAG_NAME, filtered_e_tag, "asdla"),
+                        (P_TAG_TAG_NAME, filtered_p_tag, "nostr-er-relay-co.co"),
+                        (E_TAG_TAG_NAME, choice(tagged_ids), "nostr-relay.co"),
+                        (P_TAG_TAG_NAME, choice(tagged_ids), "carpenter-co.co"),
+                        (E_TAG_TAG_NAME, choice(tagged_ids), "", "root"),
+                        (P_TAG_TAG_NAME, choice(tagged_ids), "ws://nostr-tr.pub/v2"),
                     ],
                     "content": "BJnEKLP7jPWr2V4uvvX24EgXvWArugLX6nFpk2SWC244Oq5FgQlEFl51yH6Pgz1ScePv9rpQ9wvDHnQF98Is"
                     "VNJuKX6JW2IipZrP7BkUtYYtAZvZqRukWGzFGb3vZf22Nw4j7iIUJgHq0Z0OV3gQlOoSakd6wa4gKuFascSYvYE9IKRwG2VS"
@@ -129,19 +132,19 @@ async def test_new_event_catcher() -> None:
         assert e1["created_at"] == e2["created_at"], "Created at is not a match"
         assert e1["kind"] == e2["kind"], "kinds are not a match"
         e1_e_tags = sorted(
-            (tag for tag in (e1.get("tags") or []) if tag[0] == "#e"),
+            (tag for tag in (e1.get("tags") or []) if tag[0] == E_TAG_TAG_NAME),
             key=lambda t: (t[1], t[2], t[3] if len(t) == 4 else None),  # type: ignore
         )
         e2_e_tags = sorted(
-            (tag for tag in (e2.get("tags") or []) if tag[0] == "#e"),
+            (tag for tag in (e2.get("tags") or []) if tag[0] == E_TAG_TAG_NAME),
             key=lambda t: (t[1], t[2], t[3] if len(t) == 4 else None),  # type: ignore
         )
         e1_p_tags = sorted(
-            (tag for tag in (e1.get("tags") or []) if tag[0] == "#p"),
+            (tag for tag in (e1.get("tags") or []) if tag[0] == P_TAG_TAG_NAME),
             key=lambda t: (t[1], t[2]),
         )
         e2_p_tags = sorted(
-            (tag for tag in (e2.get("tags") or []) if tag[0] == "#p"),
+            (tag for tag in (e2.get("tags") or []) if tag[0] == P_TAG_TAG_NAME),
             key=lambda t: (t[1], t[2]),
         )
         assert all(

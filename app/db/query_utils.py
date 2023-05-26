@@ -15,18 +15,14 @@ def create_runnable_query(
     return sql.SQL("{select} FROM {tname} WHERE {clause}").format(
         select=select_statement,
         tname=sql.Identifier(table_name),
-        clause=where_clause
-        if issubclass(type(where_clause), sql.Composable)
-        else sql.SQL(" and ").join(cast(Sequence[sql.Composable], where_clause)),
+        clause=where_clause if isinstance(where_clause, sql.Composable) else sql.SQL(" and ").join(where_clause),
     )
 
 
 def prepare_select_statement(
     field_names: Iterable[str | tuple[str, ...]],
     *,
-    as_names: dict[
-        str, str
-    ] = {},  # If the key exist within field names( or field names[-1])
+    as_names: dict[str, str] = {},  # If the key exist within field names( or field names[-1])
     # it will be used as "field"."name" as "as_name"
     # otherwise it will be treated as a literal
     # i.e. 'e' as "field_name"
@@ -34,15 +30,11 @@ def prepare_select_statement(
 ) -> QueryComponents:
     template = sql.SQL("SELECT {fields}")
     components: OrderedDict[str, sql.Composable] = OrderedDict()
-    for fname in (
-        f if type(f) is tuple else cast(tuple[str, ...], (f,)) for f in field_names
-    ):
+    for fname in (f if type(f) is tuple else cast(tuple[str, ...], (f,)) for f in field_names):
         if as_name := as_names.pop(fname[-1], None):
             components.setdefault(
                 as_name,
-                sql.SQL("{fname} as {as_name}").format(
-                    fname=sql.Identifier(*fname), as_name=sql.Identifier(as_name)
-                ),
+                sql.SQL("{fname} as {as_name}").format(fname=sql.Identifier(*fname), as_name=sql.Identifier(as_name)),
             )
         else:
             # TODO: Find a better hashing soltn
@@ -51,16 +43,10 @@ def prepare_select_statement(
     for literal, as_name in as_names.items():
         components.setdefault(
             as_name,
-            sql.SQL("{literal} as {as_name}").format(
-                literal=sql.Literal(literal), as_name=sql.Identifier(as_name)
-            ),
+            sql.SQL("{literal} as {as_name}").format(literal=sql.Literal(literal), as_name=sql.Identifier(as_name)),
         )
     return template.format(
-        fields=sql.SQL(",").join(
-            (val for fname in ordering if (val := components.get(fname)))
-            if ordering
-            else components.values()
-        )
+        fields=sql.SQL(",").join((val for fname in ordering if (val := components.get(fname))) if ordering else components.values())
     )
 
 
@@ -74,6 +60,8 @@ def prepare_equal_clause(
         fnames: tuple[str, ...] = (field_name,)
     elif type(field_name) is tuple:
         fnames = field_name
+    else:
+        raise Exception("field_name should be either str or tuple[str, ...]")
     return template.format(field_name=sql.Identifier(*fnames), value=sql.Placeholder())
 
 
@@ -85,12 +73,8 @@ def prepare_prefix_clause(
 ) -> QueryComponents:
     # TODO: Remove prefix_count logic
     if prefix_count:
-        pregex: sql.Composable = sql.SQL("|").join(
-            sql.Placeholder() for i in range(prefix_count)
-        )
-        prefix_literals: sql.Composable = sql.SQL("'({pregex})%%'").format(
-            pregex=pregex
-        )
+        pregex: sql.Composable = sql.SQL("|").join(sql.Placeholder() for i in range(prefix_count))
+        prefix_literals: sql.Composable = sql.SQL("'({pregex})%%'").format(pregex=pregex)
     elif prefixes:
         prefix_literals = sql.Literal(f"({'|'.join(prefixes)})%%")
     else:
@@ -100,14 +84,15 @@ def prepare_prefix_clause(
         fnames: tuple[str, ...] = (field_name,)
     elif type(field_name) is tuple:
         fnames = field_name
-    return template.format(
-        field_name=sql.Identifier(*fnames), prefix_regex=prefix_literals
-    )
+    else:
+        raise Exception("field_name should be either str or tuple[str, ...]")
+    return template.format(field_name=sql.Identifier(*fnames), prefix_regex=prefix_literals)
 
 
 def prepare_in_clause(
-    field_name: str | tuple[str, ...],
-    value_count: int | None = None,  # for placeholder
+    field_name: str
+    | tuple[str, ...],  # It can be a namespaced field-name (TableName.FieldName) then, the input should be ('TableName', 'FieldName')
+    value_count: int | None = None,  # for placeholder count
     q: RunnableQuery | None = None,  # to use another queries result at IN
 ) -> QueryComponents:
     template = sql.SQL("{field_name} IN ({values})")
@@ -115,16 +100,14 @@ def prepare_in_clause(
         fnames: tuple[str, ...] = (field_name,)
     elif type(field_name) is tuple:
         fnames = field_name
+    else:
+        raise Exception("field_name should be either str or tuple[str, ...]")
     if value_count:
-        value_template: sql.Composable = sql.SQL(",").join(
-            sql.Placeholder() for _ in range(value_count)
-        )
+        value_template: sql.Composable = sql.SQL(",").join(sql.Placeholder() for _ in range(value_count))
     elif q:
         value_template = q
     else:
-        raise InvalidMessageError(
-            "Invalid Arguments", error_type=ErrorTypes.invalid_argumentation
-        )
+        raise InvalidMessageError("Invalid Arguments", error_type=ErrorTypes.invalid_argumentation)
     return template.format(field_name=sql.Identifier(*fnames), values=value_template)
 
 
@@ -142,18 +125,12 @@ def prepare_lte_gte_clause(
         fnames: tuple[str, ...] = (field_name,)
     elif type(field_name) is tuple:
         fnames = field_name
+    else:
+        raise Exception("field_name should be either str or tuple[str, ...]")
     if gte:
-        clauses.append(
-            gte_template.format(
-                field_name=sql.Identifier(*fnames), value=sql.Placeholder()
-            )
-        )
+        clauses.append(gte_template.format(field_name=sql.Identifier(*fnames), value=sql.Placeholder()))
     if lte:
-        clauses.append(
-            lte_template.format(
-                field_name=sql.Identifier(*fnames), value=sql.Placeholder()
-            )
-        )
+        clauses.append(lte_template.format(field_name=sql.Identifier(*fnames), value=sql.Placeholder()))
     return sql.SQL(" and ").join(clauses)
 
 
@@ -172,10 +149,7 @@ def prepare_insert_into(
 
     values = sql.SQL(",").join(
         sql.SQL("({valstr})").format(valstr=valstr)
-        for valstr in (
-            sql.SQL(",").join(sql.Placeholder() for _ in range(field_count))
-            for _ in range(value_tuple_count)
-        )
+        for valstr in (sql.SQL(",").join(sql.Placeholder() for _ in range(field_count)) for _ in range(value_tuple_count))
     )
 
     return template.format(
@@ -184,8 +158,11 @@ def prepare_insert_into(
         values=values,
     )
 
-def combine_or_clauses( *clauses: QueryComponents) -> QueryComponents:
-    template = sql.SQL('({or_clauses})')
-    return template.format(
-        or_clauses=sql.SQL(' or ').join(clauses)
-    )
+
+def combine_or_clauses(*clauses: QueryComponents) -> QueryComponents:
+    template = sql.SQL("({or_clauses})")
+    return template.format(or_clauses=sql.SQL(" or ").join(clauses))
+
+
+def union_queries(*queries: RunnableQuery) -> RunnableQuery:
+    return sql.SQL("({union_queries})").format(union_queries=sql.SQL(" UNION ").join(queries))

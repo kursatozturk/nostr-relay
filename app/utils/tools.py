@@ -8,6 +8,10 @@ def flat_list(arr: Iterable[Iterable[T]]) -> list[T]:
     return [a for sl in arr for a in sl]
 
 
+def flat_tuple(arr: Iterable[Iterable[T]]) -> tuple[T, ...]:
+    return tuple(a for sl in arr for a in sl)
+
+
 def group_by(arr: list[T], key_getter: Callable[[T], _K], /) -> dict[_K, list[T]]:
     grouped_items: dict[_K, list[T]] = {}
     for item in arr:

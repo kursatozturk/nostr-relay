@@ -4,6 +4,8 @@ from typing import Any
 
 from events.data import Event
 from events.filters import EventFilterer, Filters
+from tags.db.e_tag import E_TAG_TAG_NAME
+from tags.db.p_tag import P_TAG_TAG_NAME
 
 
 def test_event_filtering() -> None:
@@ -24,12 +26,12 @@ def test_event_filtering() -> None:
         "created_at": 129312931,
         "kind": choice([1, 2]),
         "tags": [
-            ["#e", choice(tagged_ids), "asdla"],
-            ["#e", choice(tagged_ids), "nostr-relay.co"],
-            ["#p", choice(tagged_ids), "nostr-er-relay-co.co"],
-            ["#p", choice(tagged_ids), "carpenter-co.co"],
-            ["#e", choice(tagged_ids), "", "root"],
-            ["#p", choice(tagged_ids), "ws://nostr-tr.pub/v2"],
+            [E_TAG_TAG_NAME, choice(tagged_ids), "asdla"],
+            [E_TAG_TAG_NAME, choice(tagged_ids), "nostr-relay.co"],
+            [P_TAG_TAG_NAME, choice(tagged_ids), "nostr-er-relay-co.co"],
+            [P_TAG_TAG_NAME, choice(tagged_ids), "carpenter-co.co"],
+            [E_TAG_TAG_NAME, choice(tagged_ids), "", "root"],
+            [P_TAG_TAG_NAME, choice(tagged_ids), "ws://nostr-tr.pub/v2"],
         ],
         "content": "0tYbyhQ7cPcoNyaisCtQiouMbgd40njFBEGcdFaBJe1jCL6jlwgi6FISRrJlVHYmyAuNVpju0VIzeftk"
         "7mkj0KfJfzQ4vxWJUtwHb3DakQNt7Mt2LF5QwNev9dL0aLYSnrzXkpgChShNCjmUWwSOuwg5fcANNimEh9SDl2radme"
@@ -39,8 +41,8 @@ def test_event_filtering() -> None:
     event = Event(**event_dict)
     event_nostr = event.nostr_dict
 
-    filters_1 = Filters(ids=[event_dict["id"][:14]]) # one pases
-    filters_2 = Filters(ids=[event_dict["id"][10:]]) # one not but combination should allow it
+    filters_1 = Filters(ids=[event_dict["id"][:14]])  # one pases
+    filters_2 = Filters(ids=[event_dict["id"][10:]])  # one not but combination should allow it
     filterer = EventFilterer(filters_1, filters_2)
     assert filterer.test_event(event_nostr), "Event Id filtering is not working!"
 
@@ -49,10 +51,10 @@ def test_event_filtering() -> None:
     assert not filterer.test_event(event_nostr), "Event Id filtering is not working!"
 
     filters_e = Filters(
-        **{"#e": [t[1] for t in event_dict["tags"] if t[0] == "e"][:1]},  # type: ignore
+        **{"#e": [t[1] for t in event_dict["tags"] if t[0] == E_TAG_TAG_NAME][:1]},  # type: ignore
     )
     filters_p = Filters(
-        **{"#p": [t[1] for t in event_dict["tags"] if t[0] == "p"][:1]},  # type: ignore
+        **{"#p": [t[1] for t in event_dict["tags"] if t[0] == P_TAG_TAG_NAME][:1]},  # type: ignore
     )
     filterer = EventFilterer(filters_e, filters_p)
     assert filterer.test_event(event_nostr), "Tag filtering is not working!"

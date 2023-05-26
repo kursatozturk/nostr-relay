@@ -1,9 +1,12 @@
 import re
 from typing import Callable
+
+from tags.db.e_tag import E_TAG_TAG_NAME
+from tags.db.p_tag import P_TAG_TAG_NAME
 from utils.tools import flat_list
 
 from events.typings import EventNostrDict
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Filters(BaseModel):
@@ -17,17 +20,8 @@ class Filters(BaseModel):
     since: int | None = None
     until: int | None = None
     limit: int | None = None
-    e_tag: list[str] | None = None
-    p_tag: list[str] | None = None
-
-    class Config:
-        @classmethod
-        def alias_generator(cls, fname: str) -> str:
-            if fname.endswith("tag"):
-                tag_name, *_ = fname.split("_")
-                return f"#{tag_name}"
-            return fname
-
+    e_tag: list[str] | None = Field(default=None, alias="#e")
+    p_tag: list[str] | None = Field(default=None, alias="#p")
 
 class EventFilterer:
     """
@@ -53,37 +47,31 @@ class EventFilterer:
             kinds_set = set(k for k in kinds)
             tests.setdefault("kind", lambda val: val in kinds_set)
 
-        if created_at_f := [
-            (f.since, f.until) for f in filters if (f.since or f.until)
-        ]:
+        if created_at_f := [(f.since, f.until) for f in filters if (f.since or f.until)]:
             tests.setdefault(
                 "created_at",
-                lambda v: any(
-                    (since or v) <= v <= (until or v) for (since, until) in created_at_f
-                )
+                lambda v: any((since or v) <= v <= (until or v) for (since, until) in created_at_f)
                 # lambda v: ((filters.since or v) <= v <= (filters.until or v)),
             )
         # Tag Tests
         if e_tags := flat_list(f.e_tag for f in filters if f.e_tag):
             e_tag_set = set(e_tags)
-            # "#e", "{event_id}", *rest_values of tag
-            tag_tests.setdefault("#e", lambda val, *_: val in e_tag_set)
+            # E_TAG_TAG_NAME, "{event_id}", *rest_values of tag
+            tag_tests.setdefault(E_TAG_TAG_NAME, lambda val, *_: val in e_tag_set)
 
         if p_tags := flat_list(f.p_tag for f in filters if f.p_tag):
             p_tag_set = set(p_tags)
-            # "#p", "{pubkey}", *rest_values of tag
-            tag_tests.setdefault("#p", lambda val, *_: val in p_tag_set)
+            # P_TAG_TAG_NAME, "{pubkey}", *rest_values of tag
+            tag_tests.setdefault(P_TAG_TAG_NAME, lambda val, *_: val in p_tag_set)
 
         if len(tag_tests):
 
             def tags_tester(tags: list) -> bool:
+                print('#' * 100)
+                print(tags)
+                print('#' * 100)
                 return all(
-                    any(
-                        tag_test(*event_tag)
-                        for (e_t, *event_tag) in tags
-                        if e_t == tag_name
-                    )
-                    for tag_name, tag_test in tag_tests.items()
+                    any(tag_test(*event_tag) for (e_t, *event_tag) in tags if e_t == tag_name) for tag_name, tag_test in tag_tests.items()
                 )
 
             tests.setdefault("tags", tags_tester)
