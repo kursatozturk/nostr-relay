@@ -45,7 +45,6 @@ def test_event_filtering() -> None:
     filters_2 = Filters(ids=[event_dict["id"][10:]])  # one not but combination should allow it
     filterer = EventFilterer(filters_1, filters_2)
     assert filterer.test_event(event_nostr), "Event Id filtering is not working!"
-
     filters = Filters(ids=[randbytes(16).hex()[:25]])
     filterer = EventFilterer(filters)
     assert not filterer.test_event(event_nostr), "Event Id filtering is not working!"
@@ -79,7 +78,8 @@ def test_event_filtering() -> None:
     assert filterer.test_event(event_nostr), "Since/Until filtering not working!"
 
     filters = Filters(since=event_dict["created_at"] + 10, until=event_dict["created_at"] + 20)
-    filterer = EventFilterer(filters)
+    filters_2 = Filters(since=event_dict["created_at"] - 100, until=event_dict["created_at"] - 50)
+    filterer = EventFilterer(filters, filters_2)
     assert not filterer.test_event(event_nostr), "Since/Until filtering not working!"
 
     filters = Filters(kinds=[1, 2])

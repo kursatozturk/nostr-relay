@@ -17,6 +17,7 @@ from .e_tag import (
     E_TAG_FIELDS,
     E_TAG_ORDERING,
     E_TAG_TABLE_NAME,
+    E_TAG_TAG_NAME,
     db_to_e_tag,
     get_query_e_tags,
     prepare_e_tag_db_write_query,
@@ -27,6 +28,7 @@ from .p_tag import (
     P_TAG_FIELDS,
     P_TAG_ORDERING,
     P_TAG_TABLE_NAME,
+    P_TAG_TAG_NAME,
     db_to_p_tag,
     get_query_p_tags,
     prepare_p_tag_db_write_query,
@@ -91,14 +93,14 @@ async def query_tags(associated_event_ids: Sequence[str], *, conn: DBConnection 
     return q_results
 
 
-def prepare_tag_filters(*, e_tags: Sequence[str], p_tags: Sequence[str]) -> tuple[RunnableQuery | None, Sequence[str]]:
+def prepare_tag_filters(tags: dict[str, set[str]]) -> tuple[RunnableQuery | None, Sequence[str]]:
     qs: deque[RunnableQuery] = deque()
     vals: deque[str] = deque()
-    if len(e_tags):
+    if e_tags := tags.get(E_TAG_TAG_NAME):
         e_tag_filters, e_tag_vals = e_tag_filterer_query(event_ids=e_tags)
         qs.append(e_tag_filters)
         vals.extend(e_tag_vals)
-    if len(p_tags):
+    if p_tags := tags.get(P_TAG_TAG_NAME):
         p_tag_filters, p_tag_vals = prepare_p_tag_query(pubkeys=p_tags)
         qs.append(p_tag_filters)
         vals.extend(p_tag_vals)

@@ -1,26 +1,47 @@
 from collections import OrderedDict
-from typing import Iterable, Sequence, cast
+from typing import Iterable, Literal, Sequence
 
 from psycopg import sql
 from utils.errors import ErrorTypes, InvalidMessageError
-from db.typings import RunnableQuery, QueryComponents
+
+from db.typings import FieldName, QueryComponents, RunnableQuery
 
 
 def create_runnable_query(
     select_statement: QueryComponents,
     table_name: str,
     where_clause: QueryComponents | Sequence[QueryComponents],
+    order_by: Sequence[tuple[FieldName, Literal["ASC", "DESC"] | None]] | None = None,
+    limit: int | None = None,
 ) -> RunnableQuery:
     # TODO: make table_name param support joins
-    return sql.SQL("{select} FROM {tname} WHERE {clause}").format(
+    sts: list[QueryComponents | RunnableQuery] = []
+    q_st = sql.SQL("{select} FROM {tname} WHERE {clause} ").format(
         select=select_statement,
         tname=sql.Identifier(table_name),
         clause=where_clause if isinstance(where_clause, sql.Composable) else sql.SQL(" and ").join(where_clause),
     )
+    sts.append(q_st)
+    if order_by:
+        order_exprs = sql.SQL(",").join(
+            sql.SQL("{sort_expr} {asc_desc}").format(
+                sort_expr=sql.Identifier(*((fname,) if isinstance(fname, str) else fname)), asc_desc=sql.SQL(asc_desc or "")
+            )
+            for (fname, asc_desc) in order_by
+        )
+        order_st = sql.SQL("ORDER BY {order_by} ").format(order_by=order_exprs)
+        q_st += order_st
+        # sts.append(order_st)
+    if limit:
+        limit_st = sql.SQL(" LIMIT {limit}" ).format(limit=limit)
+        q_st += limit_st
+        # sts.append(limit_st)
+    return q_st
+    # return sql.SQL(" ").join(sts)
 
 
 def prepare_select_statement(
-    field_names: Iterable[str | tuple[str, ...]],
+    field_names: Iterable[FieldName],
     *,
     as_names: dict[str, str] = {},  # If the key exist within field names( or field names[-1])
     # it will be used as "field"."name" as "as_name"
@@ -30,7 +51,7 @@ def prepare_select_statement(
 ) -> QueryComponents:
     template = sql.SQL("SELECT {fields}")
     components: OrderedDict[str, sql.Composable] = OrderedDict()
-    for fname in (f if type(f) is tuple else cast(tuple[str, ...], (f,)) for f in field_names):
+    for fname in (f if isinstance(f, tuple) else (f,) for f in field_names):
         if as_name := as_names.pop(fname[-1], None):
             components.setdefault(
                 as_name,
@@ -51,22 +72,20 @@ def prepare_select_statement(
 
 
 def prepare_equal_clause(
-    field_name: str | tuple[str, ...],
+    field_name: FieldName,
 ) -> QueryComponents:
     # TODO: Make value optional,
     # when None, use Placeholder
     template = sql.SQL("{field_name} = {value}")
-    if type(field_name) is str:
+    if isinstance(field_name, str):
         fnames: tuple[str, ...] = (field_name,)
-    elif type(field_name) is tuple:
+    elif isinstance(field_name, tuple):
         fnames = field_name
-    else:
-        raise Exception("field_name should be either str or tuple[str, ...]")
     return template.format(field_name=sql.Identifier(*fnames), value=sql.Placeholder())
 
 
 def prepare_prefix_clause(
-    field_name: str | tuple[str, ...],
+    field_name: FieldName,
     *,
     prefixes: Iterable[str] | None = None,
     prefix_count: int | None = None,  # DOES NOT WORK
@@ -80,12 +99,10 @@ def prepare_prefix_clause(
     else:
         raise Exception("Invalid Arguments")  # TODO: More meaningful errors
     template = sql.SQL("{field_name} LIKE {prefix_regex}")
-    if type(field_name) is str:
+    if isinstance(field_name, str):
         fnames: tuple[str, ...] = (field_name,)
-    elif type(field_name) is tuple:
+    elif isinstance(field_name, tuple):
         fnames = field_name
-    else:
-        raise Exception("field_name should be either str or tuple[str, ...]")
     return template.format(field_name=sql.Identifier(*fnames), prefix_regex=prefix_literals)
 
 
@@ -96,12 +113,10 @@ def prepare_in_clause(
     q: RunnableQuery | None = None,  # to use another queries result at IN
 ) -> QueryComponents:
     template = sql.SQL("{field_name} IN ({values})")
-    if type(field_name) is str:
+    if isinstance(field_name, str):
         fnames: tuple[str, ...] = (field_name,)
-    elif type(field_name) is tuple:
+    elif isinstance(field_name, tuple):
         fnames = field_name
-    else:
-        raise Exception("field_name should be either str or tuple[str, ...]")
     if value_count:
         value_template: sql.Composable = sql.SQL(",").join(sql.Placeholder() for _ in range(value_count))
     elif q:
@@ -112,7 +127,7 @@ def prepare_in_clause(
 
 
 def prepare_lte_gte_clause(
-    field_name: str | tuple[str, ...],
+    field_name: FieldName,
     *,
     gte: bool = False,
     lte: bool = False,
@@ -121,12 +136,10 @@ def prepare_lte_gte_clause(
     lte_template = sql.SQL("{field_name} <= {value}")
     clauses: list[QueryComponents] = []
 
-    if type(field_name) is str:
+    if isinstance(field_name, str):
         fnames: tuple[str, ...] = (field_name,)
-    elif type(field_name) is tuple:
+    elif isinstance(field_name, tuple):
         fnames = field_name
-    else:
-        raise Exception("field_name should be either str or tuple[str, ...]")
     if gte:
         clauses.append(gte_template.format(field_name=sql.Identifier(*fnames), value=sql.Placeholder()))
     if lte:
@@ -136,14 +149,14 @@ def prepare_lte_gte_clause(
 
 def prepare_insert_into(
     table_name: str,
-    field_names: Sequence[str | tuple[str, ...]],
+    field_names: Sequence[FieldName],
     value_tuple_count: int = 1,
 ) -> RunnableQuery:
     template = sql.SQL("INSERT INTO {table_name} ({field_names}) VALUES {values}")
 
     fnames = map(
         lambda f: sql.Identifier(*f),
-        (f if type(f) is tuple else cast(tuple[str, ...], (f,)) for f in field_names),
+        (f if isinstance(f, tuple) else (f,) for f in field_names),
     )
     field_count = len(field_names)
 

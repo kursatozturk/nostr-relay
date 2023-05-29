@@ -35,6 +35,7 @@ async def nostr_server(websocket: WebSocket) -> None:
     try:
         while True:
             data = await websocket.receive_json()
+            print(f'RECEIVED DATA: {data}')
             match data:
                 case [MessageTypes.Event.value, dict() as event_dict]:
                     # await handle_received_event(event_dict)

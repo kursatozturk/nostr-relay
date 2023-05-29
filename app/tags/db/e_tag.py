@@ -15,7 +15,7 @@ E_TAG_ORDERING = tuple(f"{E_TAG_TABLE_NAME}.{fname}" for fname in E_TAG_FIELDS)
 
 def db_to_e_tag(row: tuple[str, str, str, str, MarkerType] | tuple[str, str, str, str]) -> ETagRow:
     _, tag_name, event_id, relay_url, *marker = row
-    if marker:
+    if marker and marker[0]:
         return ("e", event_id, relay_url, marker[0])
     else:
         return ("e", event_id, relay_url)
@@ -35,7 +35,7 @@ def prepare_e_tag_db_write_query(associated_event_id: str, e_tags: Sequence[E_Ta
     return e_tag_q, e_tags_vals
 
 
-def e_tag_filterer_query(event_ids: Sequence[str]) -> tuple[RunnableQuery, Sequence[str]]:
+def e_tag_filterer_query(event_ids: set[str]) -> tuple[RunnableQuery, set[str]]:
     e_tag_select = prepare_select_statement([(E_TAG_TABLE_NAME, "associated_event")])
     clause = prepare_in_clause((E_TAG_TABLE_NAME, "event_id"), len(event_ids))
     q = create_runnable_query(e_tag_select, E_TAG_TABLE_NAME, clause)

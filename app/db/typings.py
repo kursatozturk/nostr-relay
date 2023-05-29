@@ -7,3 +7,5 @@ RunnableQuery: TypeAlias = sql.SQL | sql.Composed
 QueryComponents: TypeAlias = sql.Composable
 DBConnection: TypeAlias = AsyncConnection
 DBConnectionPool: TypeAlias = AsyncConnectionPool
+
+FieldName = str | tuple[str, ...]

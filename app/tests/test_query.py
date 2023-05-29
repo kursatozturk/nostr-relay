@@ -44,6 +44,13 @@ async def test_clauses():
     select_with_ns = prepare_select_statement(field_names=namespaced_fields)
     select_str = select_with_ns.as_string(conn)
     assert select_str == 'SELECT "ns"."f1","ns"."f2","ns"."f3","ns"."f4","ns"."f5"'
+    select_statement = prepare_select_statement(field_names=fields, as_names={"f1": "alt_f1"})
+    select_str = select_statement.as_string(conn)
+    assert select_str == 'SELECT "f1" as "alt_f1","f2","f3","f4","f5"'
+    select_as = prepare_select_statement(field_names=namespaced_fields, as_names={"f1": "alt_f1"})
+    select_str = select_as.as_string(conn)
+    assert select_str == 'SELECT "ns"."f1" as "alt_f1","ns"."f2","ns"."f3","ns"."f4","ns"."f5"'
+
 
 
 @pytest.mark.asyncio

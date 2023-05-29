@@ -1,7 +1,7 @@
 import base64
 from asyncio import sleep
 from datetime import datetime
-from random import choice, randbytes, randint
+from random import choice, choices, randbytes, randint
 from typing import Any
 
 import pytest
@@ -113,15 +113,15 @@ async def test_event_handling_capability() -> None:
     ]
     event_filter = {
         "ids": [event["id"] for event in events],
-        # "kinds": [1, 2],
-        # "since": randint(
-        #     int(datetime.now().timestamp()) - 12500000,
-        #     int(datetime.now().timestamp()) - 2500000,
-        # ),
-        # "until": randint(
-        #     int(datetime.now().timestamp()) - 7500000,
-        #     int(datetime.now().timestamp()) + 250000,
-        # ),
+        "kinds": [1, 2],
+        "since": randint(
+            int(datetime.now().timestamp()) - 12500000,
+            int(datetime.now().timestamp()) - 10000000,
+        ),
+        "until": randint(
+            int(datetime.now().timestamp()),
+            int(datetime.now().timestamp()) + 250000,
+        ),
         # E_TAG_TAG_NAME: choices(tagged_ids, k=4 * len(tagged_ids) // 10),
         # P_TAG_TAG_NAME: choices(tagged_ids, k=8 * len(tagged_ids) // 10),
     }

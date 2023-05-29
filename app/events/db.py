@@ -4,6 +4,7 @@ from events.typings import EventDBDict
 
 EVENT_TABLE_NAME = "event"
 EVENT_FIELDS = ["id", "pubkey", "created_at", "kind", "content", "sig"]
+EVENT_DB_FIELDS = [*EVENT_FIELDS, "source"]
 
 def db_to_nostr(event_row: tuple[Any, ...]) -> EventDBDict:
     return EventDBDict(

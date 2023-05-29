@@ -1,17 +1,20 @@
 from asyncio import ALL_COMPLETED, create_task, wait
+import itertools
+from typing import Iterable
 
 import pytest
 import pytest_asyncio
 from cache.core import get_redis_connection
 from utils.tools import flat_list
-from cache.crud import add_vals_to_set, broadcast, fetch_vals, listen_on_key
+from cache.crud import add_vals_to_set, broadcast, delete_key, fetch_vals, listen_on_key
 from asyncio.locks import Barrier
 
 
 @pytest.mark.asyncio
 async def test_caching() -> None:
-    key = "test-key"
-    vals: list[int | str] = [1, 2, 3, 4, "test-1", "test-2"]
+    key = "keyer"
+    await delete_key(key)
+    vals: Iterable[str] = list(f'test-val-{i}' for i in range(10000))
     str_vals = set(map(str, vals))
     await add_vals_to_set(key, *vals)
     ret_vals = await fetch_vals(key)
@@ -57,24 +60,13 @@ async def test_pubsub(cacher_connector) -> None:
         return catched_vals
 
     keys = [f"test-key-{i}" for i in range(key_count)]
-    listener = flat_list(
-        [
-            [create_task(listener_task(k), name=f"listener[{k}]_{i}") for k in keys]
-            for i in range(listener_per_key)
-        ]
-    )
+    listener = flat_list([[create_task(listener_task(k), name=f"listener[{k}]_{i}") for k in keys] for i in range(listener_per_key)])
     # To make sure the all listeners started listening before broadcast!
     await listener_barrier.wait()
-    broadcasters = [
-        create_task(broadcaster_task(k), name=f"producer[{k}]") for k in keys
-    ]
+    broadcasters = [create_task(broadcaster_task(k), name=f"producer[{k}]") for k in keys]
     finished, _ = await wait((*broadcasters, *listener), return_when=ALL_COMPLETED)
-    broadcasted_vals_list = [
-        task.result() for task in finished if task.get_name().startswith("listener")
-    ]
-    listened_vals_list = [
-        task.result() for task in finished if task.get_name().startswith("producer")
-    ]
+    broadcasted_vals_list = [task.result() for task in finished if task.get_name().startswith("listener")]
+    listened_vals_list = [task.result() for task in finished if task.get_name().startswith("producer")]
     print(broadcasted_vals_list)
     print(listened_vals_list)
     assert not any(

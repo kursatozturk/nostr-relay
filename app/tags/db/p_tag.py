@@ -25,7 +25,7 @@ def prepare_p_tag_db_write_query(associated_event_id: str, p_tags: Sequence[P_Ta
     return p_tag_q, p_tag_vals
 
 
-def prepare_p_tag_query(pubkeys: Sequence[str]) -> tuple[RunnableQuery, Sequence[str]]:
+def prepare_p_tag_query(pubkeys: set[str]) -> tuple[RunnableQuery, set[str]]:
     p_tag_select = prepare_select_statement([(P_TAG_TABLE_NAME, "associated_event")])
     clause = prepare_in_clause((P_TAG_TABLE_NAME, "pubkey"), len(pubkeys))
     q = create_runnable_query(p_tag_select, P_TAG_TABLE_NAME, clause)

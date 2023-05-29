@@ -1,4 +1,3 @@
-from asyncio import CancelledError
 from collections import deque
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Sequence, TypedDict
@@ -7,10 +6,15 @@ from cache.core import get_redis_connection
 
 from .typings import CacherConnectionType
 
-
-async def add_vals_to_set(key: str, *val: int | float | str) -> int:
+async def delete_key(*keys: str) -> None:
     r = get_redis_connection()
-    return await r.sadd(key, *val)
+    await r.delete(*keys)
+
+async def add_vals_to_set(key: str, *val: str) -> None:
+    r = get_redis_connection()
+    added = await r.sadd(key, *val)
+    while added < len(val):
+        added += await r.sadd(key, *val[added:])
 
 
 async def fetch_vals(name: str) -> Sequence[str]:
@@ -18,7 +22,7 @@ async def fetch_vals(name: str) -> Sequence[str]:
     cur, vals = await r.sscan(name=name)
     values: deque[str] = deque(vals)
     while cur:
-        cur, _vals = await r.sscan(cur, name=name)
+        cur, _vals = await r.sscan(cursor=cur, name=name)
         values.extend(_vals)
     return values
 
@@ -33,8 +37,8 @@ class RedisResponse(TypedDict):
 @asynccontextmanager
 async def listen_on_key(key: str, *, r_conn: CacherConnectionType | None = None) -> AsyncIterator[AsyncIterator[RedisResponse]]:
     r = r_conn or get_redis_connection()
+    ps = r.pubsub()
     try:
-        ps = r.pubsub()
         await ps.subscribe(key)
         yield ps.listen()
     finally:
