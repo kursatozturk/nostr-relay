@@ -7,4 +7,5 @@ env/
 db/.env
 Dockerfile
 **/*.env
+app/keys/
 docker-compose.yml

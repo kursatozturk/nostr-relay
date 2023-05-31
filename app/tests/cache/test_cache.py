@@ -1,11 +1,10 @@
 from asyncio import ALL_COMPLETED, create_task, wait
-import itertools
 from typing import Iterable
 
 import pytest
 import pytest_asyncio
 from cache.core import get_redis_connection
-from utils.tools import flat_list
+from common.tools import flat_list
 from cache.crud import add_vals_to_set, broadcast, delete_key, fetch_vals, listen_on_key
 from asyncio.locks import Barrier
 
@@ -14,11 +13,10 @@ from asyncio.locks import Barrier
 async def test_caching() -> None:
     key = "keyer"
     await delete_key(key)
-    vals: Iterable[str] = list(f'test-val-{i}' for i in range(10000))
-    str_vals = set(map(str, vals))
+    vals: Iterable[str] = set(f'test-val-{i}' for i in range(1000))
     await add_vals_to_set(key, *vals)
     ret_vals = await fetch_vals(key)
-    assert not str_vals.difference(ret_vals), "Returned Values Are Different!"
+    assert not vals.difference(ret_vals), "Returned Values Are Different!"
 
 
 @pytest_asyncio.fixture

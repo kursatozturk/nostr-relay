@@ -9,7 +9,7 @@ from events.filters import EventFilterer, Filters
 from events.typings import EventNostrDict
 from fastapi import WebSocket
 from pydantic import ValidationError
-from utils.errors import ErrorTypes, InvalidMessageError
+from common.errors import ErrorTypes, InvalidMessageError
 
 NEW_EVENT_KEY = "events"
 

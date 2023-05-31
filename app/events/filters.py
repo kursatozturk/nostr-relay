@@ -3,7 +3,7 @@ from typing import Any, Callable
 
 from pydantic import BaseModel, Field, root_validator
 from tags.filters import prepare_tag_tests
-from utils.tools import create_regex_matcher_func, create_set_includes_func
+from common.tools import create_range_test_func, create_regex_matcher_func, create_set_includes_func
 
 from events.typings import EventNostrDict
 
@@ -29,6 +29,7 @@ class Filters(BaseModel):
 
         values["tags"] = tags
         return values
+
 
 class EventFilterer:
     """
@@ -56,7 +57,7 @@ class EventFilterer:
                 tests.setdefault("kind", create_set_includes_func(kinds_set))
 
             if f.since or f.until:
-                tests.setdefault("created_at", lambda v: (f.since or v) <= v <= (f.until or v))
+                tests.setdefault("created_at", create_range_test_func(f.since, f.until))
             if f.tags:
                 tags_test = prepare_tag_tests(f.tags)
                 tests.setdefault("tags", tags_test)

@@ -5,7 +5,7 @@ from cache.core import get_redis_connection
 from db.core import connect_db_pool
 from dotenv import load_dotenv
 from fastapi import FastAPI
-from ws import nostr
+from ws import nostr_server
 
 
 @asynccontextmanager
@@ -28,4 +28,5 @@ async def fastapi_lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=fastapi_lifespan)
-app.include_router(nostr)
+app.add_websocket_route("/", nostr_server)
+# app.include_router(nostr)

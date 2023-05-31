@@ -1,8 +1,8 @@
 from typing import Callable
-from tags.db.e_tag import E_TAG_TAG_NAME
-from tags.db.p_tag import P_TAG_TAG_NAME
+from tags.data.e_tag import E_TAG_TAG_NAME
+from tags.data.p_tag import P_TAG_TAG_NAME
 
-from utils.tools import group_by
+from common.tools import group_by
 
 from tags.typings import TagRow
 
@@ -22,6 +22,6 @@ def prepare_tag_tests(tag_filters: dict[str, set[str]]) -> Callable[[list[TagRow
         grouped_tags = group_by(tags, lambda t: t[0])
         tests = {tname: tester(tsets) for tname, tsets in tag_filters.items() if (tester := tag_test_mapper.get(tname))}
 
-        return all(test(grouped_tags.get(tname)) for tname, test in tests.items())
+        return all(test(grouped_tags.get(tname, [])) for tname, test in tests.items())
 
     return test

@@ -6,31 +6,44 @@ from db.core import connect_db_pool
 from db.query import run_queries
 from db.query_utils import (
     create_runnable_query,
+    prepare_delete_q,
     prepare_equal_clause,
+    prepare_gte_lte_clause,
     prepare_in_clause,
     prepare_insert_into,
-    prepare_lte_gte_clause,
     prepare_prefix_clause,
     prepare_select_statement,
     union_queries,
 )
 from db.typings import QueryComponents, RunnableQuery
-from events.typings import EventDBDict, EventNostrDict
-from tags.db.e_tag import E_TAG_TAG_NAME
-from tags.db.p_tag import P_TAG_TAG_NAME
-
-from events.data import Event
-from events.db import (
-    EVENT_FIELDS,
-    EVENT_TABLE_NAME,
-    db_to_nostr,
-)
+from tags.data.e_tag import E_TAG_TAG_NAME
+from tags.data.p_tag import P_TAG_TAG_NAME
 from tags.db import (
     prepare_tag_filters,
     query_tags,
     write_tags,
 )
+
+from events.data import METADATA_KIND, Event
+from events.db import (
+    EVENT_FIELDS,
+    EVENT_TABLE_NAME,
+    db_to_nostr,
+)
 from events.filters import Filters
+from events.typings import EventDBDict, EventNostrDict
+
+
+async def delete_old_metadata(pubkey: str) -> None:
+    kind_q = prepare_equal_clause("kind")
+    pubkey_q = prepare_equal_clause("pubkey")
+    delete_q = prepare_delete_q(EVENT_TABLE_NAME, (kind_q, pubkey_q))
+    pool = connect_db_pool()
+    async with pool.connection() as conn:
+        await run_queries(
+            no_return_queries=[(delete_q, (METADATA_KIND, pubkey))],
+            conn=conn
+        )
 
 
 async def write_event(event: Event) -> None:
@@ -71,9 +84,8 @@ async def query_events(*filters: Filters) -> list[EventNostrDict]:
             filter_queue.append(id_filter)
 
         if f.authors:
-            author_filter = prepare_prefix_clause((EVENT_TABLE_NAME, "pubkey"), prefix_count=len(f.authors))
+            author_filter = prepare_prefix_clause((EVENT_TABLE_NAME, "pubkey"), prefixes=f.authors)
             filter_queue.append(author_filter)
-            values.extend(f.authors)
 
         if f.kinds:
             kind_filter = prepare_in_clause((EVENT_TABLE_NAME, "kind"), value_count=len(f.kinds))
@@ -81,7 +93,7 @@ async def query_events(*filters: Filters) -> list[EventNostrDict]:
             values.extend(map(str, f.kinds))
 
         if f.since or f.until:
-            btwn_filter = prepare_lte_gte_clause(
+            btwn_filter = prepare_gte_lte_clause(
                 (EVENT_TABLE_NAME, "created_at"),
                 gte=f.since is not None,
                 lte=f.until is not None,

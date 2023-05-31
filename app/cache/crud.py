@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator, Sequence, TypedDict
 
 from cache.core import get_redis_connection
+from redis import ConnectionError
 
 from .typings import CacherConnectionType
 
@@ -41,9 +42,12 @@ async def listen_on_key(key: str, *, r_conn: CacherConnectionType | None = None)
     try:
         await ps.subscribe(key)
         yield ps.listen()
+    except ConnectionError:
+        pass
     finally:
         await ps.unsubscribe(key)
         await ps.close()
+        await r.close()
 
 
 async def broadcast(key: str, value: str, *, r_conn: CacherConnectionType | None = None):

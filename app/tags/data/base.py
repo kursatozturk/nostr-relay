@@ -1,5 +1,4 @@
-from typing import TypeVar
-from utils.models import NostrModel
+from common.models import NostrModel
 
 
 class BaseTag(NostrModel):

@@ -8,8 +8,8 @@ from db.query_utils import union_queries
 from db.typings import DBConnection, RunnableQuery
 from tags.data import Tag
 
-from tags.data.e_tag import E_Tag
-from tags.data.p_tag import P_Tag
+from tags.data.e_tag import E_TAG_TAG_NAME, E_Tag
+from tags.data.p_tag import P_TAG_TAG_NAME, P_Tag
 from tags.typings import TagRow
 
 from .e_tag import (
@@ -17,7 +17,6 @@ from .e_tag import (
     E_TAG_FIELDS,
     E_TAG_ORDERING,
     E_TAG_TABLE_NAME,
-    E_TAG_TAG_NAME,
     db_to_e_tag,
     get_query_e_tags,
     prepare_e_tag_db_write_query,
@@ -28,7 +27,6 @@ from .p_tag import (
     P_TAG_FIELDS,
     P_TAG_ORDERING,
     P_TAG_TABLE_NAME,
-    P_TAG_TAG_NAME,
     db_to_p_tag,
     get_query_p_tags,
     prepare_p_tag_db_write_query,

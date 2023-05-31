@@ -2,11 +2,11 @@ from typing import Sequence
 from db.query_utils import create_runnable_query, prepare_in_clause, prepare_insert_into, prepare_select_statement
 from db.typings import RunnableQuery
 from tags.data.e_tag import E_Tag
+from tags.data.e_tag import E_TAG_TAG_NAME
 from tags.typings.e_tag import ETagRow, MarkerType
-from utils.tools import flat_tuple
+from common.tools import flat_tuple
 
 
-E_TAG_TAG_NAME = "e"
 E_TAG_TABLE_NAME = "e_tag"
 E_TAG_FIELDS = ["event_id", "relay_url", "marker"]
 E_TAG_DB_FIELDS = ["associated_event", *E_TAG_FIELDS]

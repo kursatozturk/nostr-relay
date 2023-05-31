@@ -6,7 +6,7 @@ A Naive Relay Implementation of Nostr Protocol.
 
 
 Currently Supported NIPs:
-  - [ ] NIP-01
+  - [x] NIP-01
   - [x] NIP-10
 
 

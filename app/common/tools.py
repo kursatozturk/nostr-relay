@@ -19,6 +19,13 @@ def create_set_includes_func(s: set[T]) -> Callable[[T], bool]:
     return tester
 
 
+def create_range_test_func(lower_bound: int | float | None, upper_bound: int | float | None = None) -> Callable[[int | float], bool]:
+    def tester(val: int | float) -> bool:
+        return (lower_bound or val) <= val <= (upper_bound or val)
+
+    return tester
+
+
 def flat_list(arr: Iterable[Iterable[T]]) -> list[T]:
     return [a for sl in arr for a in sl]
 

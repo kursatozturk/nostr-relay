@@ -1,4 +1,6 @@
 from typing import Literal
 
 
-PTagRow = tuple[Literal['p'], str, str]
+PTagRowBase = tuple[Literal['p'], str]
+PTagRowWithRelay = tuple[*PTagRowBase, str]
+PTagRow = PTagRowBase | PTagRowWithRelay

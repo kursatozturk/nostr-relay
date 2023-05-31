@@ -3,12 +3,11 @@ from typing import Awaitable
 
 from events.enums import MessageTypes
 from events.filters import Filters
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import WebSocket, WebSocketDisconnect
 from message_handlers.event import handle_received_event
 from message_handlers.req import create_listener, handle_received_req
-from utils.tools import surpress_exc_coroutine
+from common.tools import surpress_exc_coroutine
 
-nostr = APIRouter()
 
 EVENT_HANDLER_PREFIX = "EVENT-HANDLER"
 REQ_HANDLER_PREFIX = "REQ-HANDLER"
@@ -27,7 +26,6 @@ def get_filter_listener_task_name(subs_id: str) -> str:
     return f"{EVENT_LISTENER_PREFIX}-[{subs_id}]"
 
 
-@nostr.websocket("/nostr", name="Nostr Ws")
 async def nostr_server(websocket: WebSocket) -> None:
     await websocket.accept()
     bg_tasks: dict[str, Task] = {}
@@ -35,13 +33,13 @@ async def nostr_server(websocket: WebSocket) -> None:
     try:
         while True:
             data = await websocket.receive_json()
-            print(f'RECEIVED DATA: {data}')
+            print(f"RECEIVED DATA: {data}")
             match data:
                 case [MessageTypes.Event.value, dict() as event_dict]:
                     # await handle_received_event(event_dict)
                     if event_id := event_dict.get("id"):
                         task_name = get_event_handler_task_name(event_id=event_id)
-                        event_task = create_task(handle_received_event(event_dict), name=task_name)
+                        event_task = create_task(handle_received_event(event_dict), name=task_name)  # type: ignore
                         bg_tasks.setdefault(task_name, event_task)
 
                 case [MessageTypes.Req.value, str() as subs_id, *f_dicts]:
@@ -82,7 +80,12 @@ async def nostr_server(websocket: WebSocket) -> None:
                     )
                     break
     except WebSocketDisconnect:
-        await websocket.close()
+        pass
+        # await websocket.close()
+    except Exception as e:
+        print('-----' * 100)
+        print(e)
+        print('-----' * 100)
     finally:
         await surpress_exc_coroutine(websocket.close(), BaseException)
         await_for: list[Awaitable] = []

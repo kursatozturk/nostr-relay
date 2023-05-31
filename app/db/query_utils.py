@@ -2,7 +2,7 @@ from collections import OrderedDict
 from typing import Iterable, Literal, Sequence
 
 from psycopg import sql
-from utils.errors import ErrorTypes, InvalidMessageError
+from common.errors import ErrorTypes, InvalidMessageError
 
 from db.typings import FieldName, QueryComponents, RunnableQuery
 
@@ -33,7 +33,7 @@ def create_runnable_query(
         q_st += order_st
         # sts.append(order_st)
     if limit:
-        limit_st = sql.SQL(" LIMIT {limit}" ).format(limit=limit)
+        limit_st = sql.SQL("LIMIT {limit}").format(limit=limit)
         q_st += limit_st
         # sts.append(limit_st)
     return q_st
@@ -98,7 +98,7 @@ def prepare_prefix_clause(
         prefix_literals = sql.Literal(f"({'|'.join(prefixes)})%%")
     else:
         raise Exception("Invalid Arguments")  # TODO: More meaningful errors
-    template = sql.SQL("{field_name} LIKE {prefix_regex}")
+    template = sql.SQL("{field_name} SIMILAR TO {prefix_regex}")
     if isinstance(field_name, str):
         fnames: tuple[str, ...] = (field_name,)
     elif isinstance(field_name, tuple):
@@ -126,7 +126,7 @@ def prepare_in_clause(
     return template.format(field_name=sql.Identifier(*fnames), values=value_template)
 
 
-def prepare_lte_gte_clause(
+def prepare_gte_lte_clause(
     field_name: FieldName,
     *,
     gte: bool = False,
@@ -173,9 +173,12 @@ def prepare_insert_into(
 
 
 def combine_or_clauses(*clauses: QueryComponents) -> QueryComponents:
-    template = sql.SQL("({or_clauses})")
-    return template.format(or_clauses=sql.SQL(" or ").join(clauses))
+    return sql.SQL("({or_clauses})").format(or_clauses=sql.SQL(" or ").join(clauses))
 
 
 def union_queries(*queries: RunnableQuery) -> RunnableQuery:
-    return sql.SQL("({union_queries})").format(union_queries=sql.SQL(" UNION ").join(queries))
+    return sql.SQL("({union_queries})").format(union_queries=sql.SQL(" UNION ").join(sql.SQL('({query})').format(query=query) for query in queries))
+
+
+def prepare_delete_q(table_name: str, clauses: Sequence[QueryComponents]) -> RunnableQuery:
+    return sql.SQL("DELETE FROM {table_name} WHERE {clauses}").format(table_name=sql.Identifier(table_name), clauses=sql.SQL(" and ").join(clauses))
