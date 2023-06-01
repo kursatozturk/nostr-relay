@@ -8,8 +8,8 @@ from db.query_utils import union_queries
 from db.typings import DBConnection, RunnableQuery
 from tags.data import Tag
 
-from tags.data.e_tag import E_TAG_TAG_NAME, E_Tag
-from tags.data.p_tag import P_TAG_TAG_NAME, P_Tag
+from tags.data.e_tag import E_TAG_TAG_NAME
+from tags.data.p_tag import P_TAG_TAG_NAME
 from tags.typings import TagRow
 
 from .e_tag import (
@@ -19,6 +19,7 @@ from .e_tag import (
     E_TAG_TABLE_NAME,
     db_to_e_tag,
     get_query_e_tags,
+    prepare_delete_e_tags_q,
     prepare_e_tag_db_write_query,
     e_tag_filterer_query,
 )
@@ -29,6 +30,7 @@ from .p_tag import (
     P_TAG_TABLE_NAME,
     db_to_p_tag,
     get_query_p_tags,
+    prepare_delete_p_tags_q,
     prepare_p_tag_db_write_query,
     prepare_p_tag_query,
 )
@@ -42,11 +44,20 @@ __all__ = (
     "P_TAG_FIELDS",
     "P_TAG_DB_FIELDS",
     "P_TAG_ORDERING",
+    "write_tags",
+    "query_tags",
+    "prepare_tag_filters",
+    "prepare_delete_tags_query",
 )
 
 __wr_query_builder_map: dict[str, Callable[..., tuple[RunnableQuery, Sequence]]] = {
-    E_Tag.__name__: prepare_e_tag_db_write_query,
-    P_Tag.__name__: prepare_p_tag_db_write_query,
+    "e": prepare_e_tag_db_write_query,
+    "p": prepare_p_tag_db_write_query,
+}
+
+__del_query_builder_map: dict[str, Callable[..., tuple[RunnableQuery, Sequence]]] = {
+    "e": prepare_delete_e_tags_q,
+    "p": prepare_delete_p_tags_q,
 }
 
 
@@ -62,7 +73,7 @@ __db_to_nostr: dict[str, Callable[[tuple], TagRow]] = {"e": db_to_e_tag, "p": db
 async def write_tags(associated_event_id: str, tags: list[Tag], *, conn: DBConnection | None = None):
     try:
         grouped_tags: dict[str, list[Tag]] = {
-            key: list(vals) for key, vals in itertools.groupby(sorted(tags, key=lambda tag: type(tag).__name__), lambda tag: type(tag).__name__)
+            key: list(vals) for key, vals in itertools.groupby(sorted(tags, key=lambda tag: tag.tag), lambda tag: tag.tag)
         }
         queries = tuple(
             q_builder(associated_event_id, _tags) for tname, _tags in grouped_tags.items() if (q_builder := __wr_query_builder_map[tname])
@@ -106,3 +117,15 @@ def prepare_tag_filters(tags: dict[str, set[str]]) -> tuple[RunnableQuery | None
         q = union_queries(*qs)
         return q, vals
     return None, vals
+
+
+def prepare_delete_tags_query(
+    associated_event_id: str | RunnableQuery, *, selective_tags: set[str] | None = None
+) -> dict[str, tuple[RunnableQuery, Sequence]]:
+    if selective_tags is None:
+        selective_tags = {t for t in __del_query_builder_map.keys()}
+    return {
+        tag_name: q_builder(associated_event_id=associated_event_id)
+        for tag_name, q_builder in __del_query_builder_map.items()
+        if tag_name in selective_tags
+    }

@@ -49,3 +49,7 @@ class Event(NostrModel):
     @property
     def is_metadata(self) -> bool:
         return self.kind == 0
+
+    @property
+    def is_contact_list(self) -> bool:
+        return self.kind == 3

@@ -31,7 +31,7 @@ async def test_req_handler() -> None:
     await barrier.wait()  # Let the listener consumes existing events
 
     async with TestClient(standalone_app.app) as client:
-        async with client.websocket_connect("") as ws:
+        async with client.websocket_connect("/") as ws:
             await ws.send_json([MessageTypes.Event.value, event1.nostr_dict])
             await ws.send_json([MessageTypes.Event.value, event2.nostr_dict])
 

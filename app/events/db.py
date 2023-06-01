@@ -28,7 +28,7 @@ def generate_sql_schema_e_tag() -> sql.SQL:
     CREATE TYPE marker_type AS ENUM ('reply', 'root', 'mention');
     CREATE TABLE e_tag (
       e_id SERIAL PRIMARY KEY,
-      associated_event CHAR(64) REFERENCES event(id),
+      associated_event CHAR(64) REFERENCES event(id) ON DELETE CASCADE,
       event_id VARCHAR(64),
       relay_url TEXT,
       marker marker_type
@@ -43,9 +43,10 @@ def generate_sql_schem_p_tag() -> sql.SQL:
         """
     CREATE TABLE p_tag (
       p_id SERIAL PRIMARY KEY,
-      associated_event CHAR(64) REFERENCES event(id),
+      associated_event CHAR(64) REFERENCES event(id) ON DELETE CASCADE,
       pubkey VARCHAR(64),
-      relay_url TEXT
+      relay_url TEXT,
+      pet_name VARCHAR(128)
     );
     CREATE INDEX "p_tag_pubkey_index" ON p_tag (pubkey);
   """

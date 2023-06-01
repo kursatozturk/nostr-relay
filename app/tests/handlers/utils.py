@@ -35,7 +35,7 @@ async def event_listener(*expected_events: Event):
 async def listen_new_events(barrier: Barrier, subscription_id: str, event_filter: dict, expected_new_event_count: int) -> list[EventNostrDict]:
     recv_events: list[EventNostrDict] = []
     async with TestClient(standalone_app.app) as client:
-        async with client.websocket_connect("") as ws:
+        async with client.websocket_connect("/") as ws:
             await ws.send_json(
                 [
                     MessageTypes.Req.value,

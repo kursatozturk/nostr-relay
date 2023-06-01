@@ -61,9 +61,9 @@ async def test_runnable_query():
     union_q = union_queries(runnable_q, runnable_q_2)
     q_str = union_q.as_string(conn)
     assert q_str == (
-        '(SELECT "f1","f2","f3","f4","f5" FROM "test_table" WHERE "f1" = %s and "f3" >= %s ORDER BY "f2" DESC LIMIT 10'
+        '((SELECT "f1","f2","f3","f4","f5" FROM "test_table" WHERE "f1" = %s and "f3" >= %s ORDER BY "f2" DESC LIMIT 10)'
         " UNION "
-        'SELECT "f1","f2","f3","f4","f5" FROM "test_table" WHERE "f3" = %s and "f2" <= %s ORDER BY "f5" DESC LIMIT 255)'
+        '(SELECT "f1","f2","f3","f4","f5" FROM "test_table" WHERE "f3" = %s and "f2" <= %s ORDER BY "f5" DESC LIMIT 255))'
     )
 
 

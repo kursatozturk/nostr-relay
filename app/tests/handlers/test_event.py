@@ -1,4 +1,4 @@
-from asyncio import create_task, sleep, wait_for
+from asyncio import create_task, wait_for
 import pytest
 from events.crud import fetch_event
 from events.data import Event
@@ -34,14 +34,14 @@ async def test_ws_event_handler():
         async with TestClient(standalone_app.app) as client:
             events = [generate_event() for _ in range(event_per_client)]
             generated_events.extend(events)
-            async with client.websocket_connect("") as ws:
+            async with client.websocket_connect("/") as ws:
                 # Send Out the events
                 for event in events:
                     await ws.send_json([MessageTypes.Event.value, event.nostr_dict])
 
     event_filter = {"ids": [e.id for e in generated_events]}
     async with TestClient(standalone_app.app) as client:
-        async with client.websocket_connect("") as ws:
+        async with client.websocket_connect("/") as ws:
             # a separate connection to behave as if independent client
             subscription_id = "asudhptxapidsioixlhgxsqjhzsxjdei"
             await ws.send_json([MessageTypes.Req.value, subscription_id, event_filter])

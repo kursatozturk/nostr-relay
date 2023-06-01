@@ -71,9 +71,7 @@ def prepare_select_statement(
     )
 
 
-def prepare_equal_clause(
-    field_name: FieldName,
-) -> QueryComponents:
+def prepare_equal_clause(field_name: FieldName, *, q: RunnableQuery | None = None) -> QueryComponents:
     # TODO: Make value optional,
     # when None, use Placeholder
     template = sql.SQL("{field_name} = {value}")
@@ -81,7 +79,7 @@ def prepare_equal_clause(
         fnames: tuple[str, ...] = (field_name,)
     elif isinstance(field_name, tuple):
         fnames = field_name
-    return template.format(field_name=sql.Identifier(*fnames), value=sql.Placeholder())
+    return template.format(field_name=sql.Identifier(*fnames), value=q if q else sql.Placeholder())
 
 
 def prepare_prefix_clause(
@@ -177,8 +175,12 @@ def combine_or_clauses(*clauses: QueryComponents) -> QueryComponents:
 
 
 def union_queries(*queries: RunnableQuery) -> RunnableQuery:
-    return sql.SQL("({union_queries})").format(union_queries=sql.SQL(" UNION ").join(sql.SQL('({query})').format(query=query) for query in queries))
+    return sql.SQL("({union_queries})").format(
+        union_queries=sql.SQL(" UNION ").join(sql.SQL("({query})").format(query=query) for query in queries)
+    )
 
 
 def prepare_delete_q(table_name: str, clauses: Sequence[QueryComponents]) -> RunnableQuery:
-    return sql.SQL("DELETE FROM {table_name} WHERE {clauses}").format(table_name=sql.Identifier(table_name), clauses=sql.SQL(" and ").join(clauses))
+    return sql.SQL("DELETE FROM {table_name} WHERE {clauses}").format(
+        table_name=sql.Identifier(table_name), clauses=sql.SQL(" and ").join(clauses)
+    )

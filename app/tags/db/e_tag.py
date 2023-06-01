@@ -1,5 +1,12 @@
 from typing import Sequence
-from db.query_utils import create_runnable_query, prepare_in_clause, prepare_insert_into, prepare_select_statement
+from db.query_utils import (
+    create_runnable_query,
+    prepare_delete_q,
+    prepare_equal_clause,
+    prepare_in_clause,
+    prepare_insert_into,
+    prepare_select_statement,
+)
 from db.typings import RunnableQuery
 from tags.data.e_tag import E_Tag
 from tags.data.e_tag import E_TAG_TAG_NAME
@@ -55,3 +62,15 @@ def get_query_e_tags(associated_event_ids: Sequence[str]) -> tuple[RunnableQuery
     e_tag_event_clause = prepare_in_clause((E_TAG_TABLE_NAME, "associated_event"), len(associated_event_ids))
     q = create_runnable_query(selector, E_TAG_TABLE_NAME, e_tag_event_clause)
     return q, associated_event_ids
+
+
+def prepare_delete_e_tags_q(associated_event_id: str | RunnableQuery) -> tuple[RunnableQuery, Sequence[str]]:
+    vals: list[str] = []
+    if isinstance(associated_event_id, RunnableQuery):
+        eq_clause = prepare_equal_clause("associated_event_id", q=associated_event_id)
+    else:
+        eq_clause = prepare_equal_clause("associated_event_id")
+        vals.append(associated_event_id)
+
+    delete_q = prepare_delete_q(E_TAG_TABLE_NAME, (eq_clause,))
+    return delete_q, vals

@@ -8,12 +8,13 @@ A Naive Relay Implementation of Nostr Protocol.
 Currently Supported NIPs:
   - [x] NIP-01
   - [x] NIP-10
+  - [x] NIP-02
+
 
 
 # Planned to Be Added NIPs
 
 ## Priority Level 1
-  - NIP-02 (Contact List and Petnames)
   - NIP-09 (Event Deletion)
   - NIP-16 (Event Treatment)
   - NIP-45 (Event Counts)

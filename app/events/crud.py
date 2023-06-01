@@ -35,15 +35,22 @@ from events.typings import EventDBDict, EventNostrDict
 
 
 async def delete_old_metadata(pubkey: str) -> None:
-    kind_q = prepare_equal_clause("kind")
-    pubkey_q = prepare_equal_clause("pubkey")
-    delete_q = prepare_delete_q(EVENT_TABLE_NAME, (kind_q, pubkey_q))
+    kind_clause = prepare_equal_clause("kind")
+    pubkey_clause = prepare_equal_clause("pubkey")
+    delete_q = prepare_delete_q(EVENT_TABLE_NAME, (kind_clause, pubkey_clause))
     pool = connect_db_pool()
     async with pool.connection() as conn:
-        await run_queries(
-            no_return_queries=[(delete_q, (METADATA_KIND, pubkey))],
-            conn=conn
-        )
+        await run_queries(no_return_queries=[(delete_q, (METADATA_KIND, pubkey))], conn=conn)
+
+
+async def delete_contact_list(pubkey: str) -> None:
+    kind_clause = prepare_equal_clause("kind")
+    pubkey_clause = prepare_equal_clause("pubkey")
+    delete_event_q = prepare_delete_q(EVENT_TABLE_NAME, (kind_clause, pubkey_clause))
+    pool = connect_db_pool()
+    async with pool.connection() as conn:
+        # Db Will automatically delete the associated tags
+        await run_queries(no_return_queries=[(delete_event_q, (3, pubkey))], conn=conn)
 
 
 async def write_event(event: Event) -> None:

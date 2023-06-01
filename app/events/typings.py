@@ -1,7 +1,7 @@
 from typing import Literal, TypedDict
 from tags.typings import TagRow
 
-KindType = Literal[0, 1, 2, 3, 4, 5]
+KindType = Literal[0, 1, 2, 3]
 
 
 class EventDBDict(TypedDict):
