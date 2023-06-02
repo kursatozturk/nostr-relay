@@ -3,18 +3,18 @@ from asyncio import CancelledError
 
 from cache.core import get_redis_connection
 from cache.crud import listen_on_key
+from common.typings import SenderAsyncWebsocket
 from events.crud import query_events
 from events.enums import MessageTypes
 from events.filters import EventFilterer, Filters
 from events.typings import EventNostrDict
-from fastapi import WebSocket
 from pydantic import ValidationError
 from common.errors import ErrorTypes, InvalidMessageError
 
 NEW_EVENT_KEY = "events"
 
 
-async def create_listener(*filters: Filters, ws: WebSocket, subscription_id: str) -> None:
+async def create_listener(*filters: Filters, ws: SenderAsyncWebsocket, subscription_id: str) -> None:
     event_filterer = EventFilterer(*filters)
     r_conn = get_redis_connection()
     async with listen_on_key(NEW_EVENT_KEY, r_conn=r_conn) as listener:
@@ -26,7 +26,7 @@ async def create_listener(*filters: Filters, ws: WebSocket, subscription_id: str
     await r_conn.close()
 
 
-async def handle_received_req(ws: WebSocket, subs_id: str, filters: list[Filters]) -> None:
+async def handle_received_req(ws: SenderAsyncWebsocket, subs_id: str, filters: list[Filters]) -> None:
     try:
         # filters = [Filters(**filters_dict) for filters_dict in filters_dicts]
         events = await query_events(*filters)

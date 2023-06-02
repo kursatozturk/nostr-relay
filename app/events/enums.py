@@ -7,3 +7,4 @@ class MessageTypes(Enum):
     Close = "CLOSE"
     Eose = "EOSE"
     Notice = "NOTICE"
+    Count = "COUNT"

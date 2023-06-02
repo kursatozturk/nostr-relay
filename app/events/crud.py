@@ -1,10 +1,11 @@
 from collections import deque
 from itertools import groupby
-from typing import Annotated, Sequence
+from typing import Sequence
 
 from db.core import connect_db_pool
 from db.query import run_queries
 from db.query_utils import (
+    CountFunc,
     create_runnable_query,
     prepare_delete_q,
     prepare_equal_clause,
@@ -100,43 +101,78 @@ async def write_event(event: Event) -> None:
         await write_tags(event.id, event.tags, conn=conn)
 
 
+def prepare_filter_clauses(f: Filters) -> tuple[Sequence[QueryComponents], Sequence[str | int]]:
+    filter_queue: deque[QueryComponents] = deque()
+    values: deque[str | int] = deque()
+    if f.ids:
+        id_filter = prepare_prefix_clause((EVENT_TABLE_NAME, "id"), prefixes=f.ids)
+        filter_queue.append(id_filter)
+
+    if f.authors:
+        author_filter = prepare_prefix_clause((EVENT_TABLE_NAME, "pubkey"), prefixes=f.authors)
+        filter_queue.append(author_filter)
+
+    if f.kinds:
+        kind_filter = prepare_in_clause((EVENT_TABLE_NAME, "kind"), value_count=len(f.kinds))
+        filter_queue.append(kind_filter)
+        values.extend(map(str, f.kinds))
+
+    if f.since or f.until:
+        btwn_filter = prepare_gte_lte_clause(
+            (EVENT_TABLE_NAME, "created_at"),
+            gte=f.since is not None,
+            lte=f.until is not None,
+        )
+        if f.since:
+            values.append(f.since)
+        if f.until:
+            values.append(f.until)
+
+        filter_queue.append(btwn_filter)
+
+    tag_q, tag_vals = prepare_tag_filters(f.tags)
+    if tag_q:
+        tag_filter = prepare_in_clause((EVENT_TABLE_NAME, "id"), q=tag_q)
+        filter_queue.append(tag_filter)
+        values.extend(tag_vals)
+
+    return filter_queue, values
+
+
+async def count_events(*filters: Filters) -> int:
+    filter_queries: deque[RunnableQuery] = deque()
+    filter_q_vals: deque[str | int] = deque()
+    for f in filters:
+        filter_queue, values = prepare_filter_clauses(f)
+
+        select_statement = prepare_select_statement(["id"])
+        query = create_runnable_query(
+            select_statement, EVENT_TABLE_NAME, filter_queue, order_by=[((EVENT_TABLE_NAME, "created_at"), "DESC")], limit=f.limit
+        )
+        filter_queries.append(query)
+        filter_q_vals.extend(values)
+
+    from_t = union_queries(*filter_queries)
+    selector = prepare_select_statement([], as_names={CountFunc("id", True): "event_count"})
+    query = create_runnable_query(selector, from_t)
+    pool = connect_db_pool()
+    async with pool.connection() as conn:
+        print(query.as_string(conn))
+        query_results = await run_queries(
+            return_queries={"count": (query, filter_q_vals)},
+            conn=conn,
+        )
+        print(query_results)
+        count_data = query_results["count"]
+        event_count: int = count_data[0][0]
+    return event_count
+
+
 async def query_events(*filters: Filters) -> list[EventNostrDict]:
     filter_queries: deque[RunnableQuery] = deque()
     filter_q_vals: deque[str | int] = deque()
     for f in filters:
-        filter_queue: deque[QueryComponents] = deque()
-        values: deque[str | int] = deque()
-        if f.ids:
-            id_filter = prepare_prefix_clause((EVENT_TABLE_NAME, "id"), prefixes=f.ids)
-            filter_queue.append(id_filter)
-
-        if f.authors:
-            author_filter = prepare_prefix_clause((EVENT_TABLE_NAME, "pubkey"), prefixes=f.authors)
-            filter_queue.append(author_filter)
-
-        if f.kinds:
-            kind_filter = prepare_in_clause((EVENT_TABLE_NAME, "kind"), value_count=len(f.kinds))
-            filter_queue.append(kind_filter)
-            values.extend(map(str, f.kinds))
-
-        if f.since or f.until:
-            btwn_filter = prepare_gte_lte_clause(
-                (EVENT_TABLE_NAME, "created_at"),
-                gte=f.since is not None,
-                lte=f.until is not None,
-            )
-            if f.since:
-                values.append(f.since)
-            if f.until:
-                values.append(f.until)
-
-            filter_queue.append(btwn_filter)
-
-        tag_q, tag_vals = prepare_tag_filters(f.tags)
-        if tag_q:
-            tag_filter = prepare_in_clause((EVENT_TABLE_NAME, "id"), q=tag_q)
-            filter_queue.append(tag_filter)
-            values.extend(tag_vals)
+        filter_queue, values = prepare_filter_clauses(f)
 
         select_statement = prepare_select_statement(((EVENT_TABLE_NAME, f) for f in EVENT_FIELDS))
         query = create_runnable_query(

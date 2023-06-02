@@ -1,4 +1,3 @@
-from re import A
 import pytest
 from db.core import _get_async_connection
 from db.query_utils import (
@@ -37,7 +36,7 @@ async def test_runnable_query():
     gte_clause = prepare_gte_lte_clause(field_name=fields[2], gte=True)
     runnable_q = create_runnable_query(
         select_statement=select_statement,
-        table_name=table_name,
+        from_t=table_name,
         where_clause=(equal_clause, gte_clause),
         order_by=[(order_by_field, "DESC")],
         limit=10,
@@ -50,7 +49,7 @@ async def test_runnable_query():
     lte_clause = prepare_gte_lte_clause(field_name=fields[1], lte=True)
     runnable_q_2 = create_runnable_query(
         select_statement=select_statement,
-        table_name=table_name,
+        from_t=table_name,
         where_clause=(equal_clause, lte_clause),
         order_by=[(fields[-1], "DESC")],
         limit=255,

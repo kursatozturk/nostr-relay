@@ -7,20 +7,45 @@ from common.errors import ErrorTypes, InvalidMessageError
 from db.typings import FieldName, QueryComponents, RunnableQuery
 
 
+class __DBFuncs:
+    def __init__(self, func: QueryComponents) -> None:
+        self.__func = func
+
+    def __call__(self) -> QueryComponents:
+        return self.__func
+
+
+class CountFunc(__DBFuncs):
+    def __init__(self, count_field: FieldName = "*", is_distinct: bool = False) -> None:
+        fname_identifier = sql.Identifier(*(count_field if isinstance(count_field, tuple) else (count_field,)))
+        if is_distinct:
+            func = sql.SQL("COUNT(distinct {count_field})").format(count_field=fname_identifier)
+        else:
+            func = sql.SQL("COUNT({count_field})").format(count_field=fname_identifier)
+        super().__init__(func)
+
+
 def create_runnable_query(
     select_statement: QueryComponents,
-    table_name: str,
-    where_clause: QueryComponents | Sequence[QueryComponents],
+    from_t: str | RunnableQuery,
+    where_clause: QueryComponents | Sequence[QueryComponents] = [],
     order_by: Sequence[tuple[FieldName, Literal["ASC", "DESC"] | None]] | None = None,
     limit: int | None = None,
 ) -> RunnableQuery:
     # TODO: make table_name param support joins
     sts: list[QueryComponents | RunnableQuery] = []
-    q_st = sql.SQL("{select} FROM {tname} WHERE {clause} ").format(
-        select=select_statement,
-        tname=sql.Identifier(table_name),
-        clause=where_clause if isinstance(where_clause, sql.Composable) else sql.SQL(" and ").join(where_clause),
-    )
+    if where_clause:
+        q_st = sql.SQL("{select} FROM {tname} WHERE {clause} ").format(
+            select=select_statement,
+            tname=sql.Identifier(from_t) if isinstance(from_t, str) else sql.SQL("({q}) t").format(q=from_t),
+            clause=where_clause if isinstance(where_clause, sql.Composable) else sql.SQL(" and ").join(where_clause),
+        )
+    else:
+        q_st = sql.SQL("{select} FROM {tname} ").format(
+            select=select_statement,
+            tname=sql.Identifier(from_t) if isinstance(from_t, str) else sql.SQL("({q}) t").format(q=from_t),
+        )
+
     sts.append(q_st)
     if order_by:
         order_exprs = sql.SQL(",").join(
@@ -43,7 +68,7 @@ def create_runnable_query(
 def prepare_select_statement(
     field_names: Iterable[FieldName],
     *,
-    as_names: dict[str, str] = {},  # If the key exist within field names( or field names[-1])
+    as_names: dict[str | __DBFuncs, str] = {},  # If the key exist within field names( or field names[-1])
     # it will be used as "field"."name" as "as_name"
     # otherwise it will be treated as a literal
     # i.e. 'e' as "field_name"
@@ -61,11 +86,17 @@ def prepare_select_statement(
             # TODO: Find a better hashing soltn
             components.setdefault(".".join(fname), sql.Identifier(*fname))
 
-    for literal, as_name in as_names.items():
+    for literal_or_func, as_name in as_names.items():
         components.setdefault(
             as_name,
-            sql.SQL("{literal} as {as_name}").format(literal=sql.Literal(literal), as_name=sql.Identifier(as_name)),
+            sql.SQL("{literal} as {as_name}").format(
+                literal=literal_or_func() if isinstance(literal_or_func, __DBFuncs) else sql.Literal(literal_or_func),
+                as_name=sql.Identifier(as_name),
+            ),
         )
+        print("------" * 50)
+        print(components.get(as_name))
+        print("------" * 50)
     return template.format(
         fields=sql.SQL(",").join((val for fname in ordering if (val := components.get(fname))) if ordering else components.values())
     )

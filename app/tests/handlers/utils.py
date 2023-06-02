@@ -1,5 +1,7 @@
 import json
 from asyncio import Barrier
+from typing import Any, Callable
+from common.typings import SerializableDataType
 
 import standalone_app
 from async_asgi_testclient import TestClient
@@ -10,6 +12,21 @@ from events.typings import EventNostrDict
 from message_handlers.event import NEW_EVENT_KEY
 from pydantic import ValidationError
 from tests.events.utils import assert_two_events_same
+
+
+
+class MockAsyncSenderWebsocket:
+    def __init__(self):
+        self._sent_data_container: list[SerializableDataType] = []
+
+    async def send_json(self, data: SerializableDataType) -> None:
+        self._sent_data_container.append(data)
+
+    def get_data(self, *, sort_key: Callable[[SerializableDataType], Any] | None = None) -> list[SerializableDataType]:
+        if sort_key:
+            return sorted(self._sent_data_container, key=sort_key)
+        else:
+            return self._sent_data_container
 
 
 async def event_listener(*expected_events: Event):
@@ -31,6 +48,7 @@ async def event_listener(*expected_events: Event):
                     assert False, "Invalid data received!"
             if not events_by_id:
                 break
+
 
 async def listen_new_events(barrier: Barrier, subscription_id: str, event_filter: dict, expected_new_event_count: int) -> list[EventNostrDict]:
     recv_events: list[EventNostrDict] = []

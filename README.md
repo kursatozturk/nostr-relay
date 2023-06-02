@@ -11,13 +11,14 @@ Currently Supported NIPs:
   - [x] NIP-09
   - [x] NIP-10
   - [x] NIP-16
+  - [x] NIP-45
 
 
 
 # Planned to Be Added NIPs
 
 ## Priority Level 1
-  - NIP-45 (Event Counts)
+  - Finished up these tasks!
 
 ## Priority Level 2
   - NIP-11 (Relay Information Document)

@@ -70,6 +70,7 @@ class Event(NostrModel):
     def is_replaceable_event(self) -> bool:
         return 10000 <= self.kind < 20000
 
+    @property
     def is_ephemeral_event(self) -> bool:
         return 20000 < self.kind < 30000
 

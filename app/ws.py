@@ -4,6 +4,7 @@ from typing import Awaitable
 from events.enums import MessageTypes
 from events.filters import Filters
 from fastapi import WebSocket, WebSocketDisconnect
+from message_handlers.count import handle_received_count
 from message_handlers.event import handle_received_event
 from message_handlers.req import create_listener, handle_received_req
 from common.tools import surpress_exc_coroutine
@@ -11,6 +12,7 @@ from common.tools import surpress_exc_coroutine
 
 EVENT_HANDLER_PREFIX = "EVENT-HANDLER"
 REQ_HANDLER_PREFIX = "REQ-HANDLER"
+COUNT_HANDLER_PREFIX = "COUNT-HANDLER"
 EVENT_LISTENER_PREFIX = "EVENT-LISTENER"
 
 
@@ -20,6 +22,10 @@ def get_event_handler_task_name(event_id: str) -> str:
 
 def get_req_handler_task_name(subs_id: str) -> str:
     return f"{REQ_HANDLER_PREFIX}-[{subs_id}]"
+
+
+def get_count_handler_task_name(subs_id: str) -> str:
+    return f"{COUNT_HANDLER_PREFIX}-[{subs_id}]"
 
 
 def get_filter_listener_task_name(subs_id: str) -> str:
@@ -69,6 +75,12 @@ async def nostr_server(websocket: WebSocket) -> None:
                     bg_tasks.setdefault(handler_task_name, handler_task)
                     bg_tasks.setdefault(filter_listener_task_name, filter_listener_task)
 
+                case [MessageTypes.Count.value, str() as subs_id, *f_dicts]:
+                    filters = [Filters(**filter_dict) for filter_dict in f_dicts]
+                    task_name = get_count_handler_task_name(subs_id)
+                    counter_task = create_task(handle_received_count(websocket, subs_id, filters), name=task_name)
+                    bg_tasks.setdefault(task_name, counter_task)
+
                 case [MessageTypes.Close.value, str() as subs_id]:
                     break
                 case _:
@@ -83,16 +95,18 @@ async def nostr_server(websocket: WebSocket) -> None:
         pass
         # await websocket.close()
     except Exception as e:
-        print('-----' * 100)
+        print("-----" * 100)
         print(e)
-        print('-----' * 100)
+        print("-----" * 100)
     finally:
         await surpress_exc_coroutine(websocket.close(), BaseException)
         await_for: list[Awaitable] = []
         for tname, task in bg_tasks.items():
             if tname.startswith(EVENT_HANDLER_PREFIX):
+                # Data Persister Tasks, wait until they are finished successfuly
                 await_for.append(task)
             else:
+                # Client Interacting Tasks, cancel them.
                 task.cancel("Connection Exited")
                 await_for.append(create_task(surpress_exc_coroutine(task, CancelledError)))
         if await_for:

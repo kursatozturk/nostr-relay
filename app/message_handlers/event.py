@@ -36,7 +36,6 @@ async def handle_received_event(event_dict: EventNostrDict) -> None:
         if existing_event and existing_event["created_at"] >= event.created_at:
             return
         await delete_event_by_kind_pubkey(event.kind, event.pubkey)
-
     if event.should_store_event:
         await surpress_exc_coroutine(write_event(event=event), UniqueViolation)
     await broadcast(NEW_EVENT_KEY, json.dumps(event.nostr_dict))
