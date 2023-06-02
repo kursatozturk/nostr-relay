@@ -65,6 +65,7 @@ def generate_sql_schema_event() -> sql.SQL:
         sig CHAR(128)
     );
     CREATE INDEX "event_kind_pubkey_index" ON event (kind, pubkey);
+    CREATE INDEX "event_pubkey_index" ON event (pubkey);
     """
     )
 

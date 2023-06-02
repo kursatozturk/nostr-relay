@@ -1,8 +1,10 @@
+import datetime
 from hashlib import sha256
-import time
-from events.data import Event
-from common.errors import NostrValidationError
+
 import secp256k1
+from common.errors import NostrValidationError
+
+from events.data import Event
 
 
 def validate_pubkey(event: Event) -> bool:
@@ -30,7 +32,15 @@ def validate_event_sig(event: Event) -> bool:
 
 
 def validate_created_at(event: Event) -> bool:
-    a_week_before = time.time() - 24 * 60 * 60 * 7
-    if event.created_at < a_week_before:
+    now = datetime.datetime.now().timestamp()
+    a_week_before = now - 24 * 60 * 60 * 7
+    if event.created_at < a_week_before or event.created_at > now:
         raise NostrValidationError("Event Timestamp is too old!")
     return True
+
+
+validators = (validate_pubkey, validate_event_id, validate_event_sig, validate_created_at)
+
+
+def validate_event(event: Event) -> bool:
+    return all(validator(event) for validator in validators)

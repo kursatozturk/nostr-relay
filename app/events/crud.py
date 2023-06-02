@@ -1,6 +1,6 @@
 from collections import deque
 from itertools import groupby
-from typing import Sequence
+from typing import Annotated, Sequence
 
 from db.core import connect_db_pool
 from db.query import run_queries
@@ -24,33 +24,53 @@ from tags.db import (
     write_tags,
 )
 
-from events.data import METADATA_KIND, Event
+from events.data import Event
 from events.db import (
     EVENT_FIELDS,
     EVENT_TABLE_NAME,
     db_to_nostr,
 )
 from events.filters import Filters
-from events.typings import EventDBDict, EventNostrDict
+from events.typings import EventDBDict, EventNostrDict, KindType
 
 
-async def delete_old_metadata(pubkey: str) -> None:
-    kind_clause = prepare_equal_clause("kind")
-    pubkey_clause = prepare_equal_clause("pubkey")
-    delete_q = prepare_delete_q(EVENT_TABLE_NAME, (kind_clause, pubkey_clause))
-    pool = connect_db_pool()
-    async with pool.connection() as conn:
-        await run_queries(no_return_queries=[(delete_q, (METADATA_KIND, pubkey))], conn=conn)
-
-
-async def delete_contact_list(pubkey: str) -> None:
+async def delete_event_by_kind_pubkey(kind: KindType, pubkey: str) -> None:
     kind_clause = prepare_equal_clause("kind")
     pubkey_clause = prepare_equal_clause("pubkey")
     delete_event_q = prepare_delete_q(EVENT_TABLE_NAME, (kind_clause, pubkey_clause))
     pool = connect_db_pool()
     async with pool.connection() as conn:
         # Db Will automatically delete the associated tags
-        await run_queries(no_return_queries=[(delete_event_q, (3, pubkey))], conn=conn)
+        await run_queries(no_return_queries=[(delete_event_q, (kind, pubkey))], conn=conn)
+
+
+async def fetch_event_by_kind_pubkey(kind: KindType, pubkey: str) -> EventDBDict | None:
+    """
+    Use this with replacable Event Kind Values only!
+    (10000 <= kind < 20000)
+    """
+    kind_clause = prepare_equal_clause("kind")
+    pubkey_clause = prepare_equal_clause("pubkey")
+    select_event = prepare_select_statement((EVENT_TABLE_NAME, f) for f in EVENT_FIELDS)
+    q = create_runnable_query(select_event, EVENT_TABLE_NAME, (kind_clause, pubkey_clause))
+
+    pool = connect_db_pool()
+    async with pool.connection() as conn:
+        response = await run_queries(return_queries={"events": (q, (kind, pubkey))}, data_converters={"events": db_to_nostr}, conn=conn)
+        if response["events"]:
+            return response["events"][0]
+        else:
+            return None
+
+
+async def delete_events(pubkey: str, e_ids: Sequence[str]) -> None:
+    pubkey_clause = prepare_equal_clause("pubkey")
+    id_clause = prepare_in_clause("id", 1)
+    delete_q = prepare_delete_q(EVENT_TABLE_NAME, (pubkey_clause, id_clause))
+    pool = connect_db_pool()
+    async with pool.connection() as conn:
+        # Db Will automatically delete the associated tags
+        await run_queries(no_return_queries=[(delete_q, (pubkey, e_ids))], conn=conn)
 
 
 async def write_event(event: Event) -> None:

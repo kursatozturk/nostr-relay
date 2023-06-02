@@ -22,12 +22,12 @@ def serialize_event(pubkey: str, created_at: int, kind: int, tags: list[BaseTag]
     ).encode()
 
 
-def generate_event(content: str | None = None, tags: list[BaseTag] | None = None) -> Event:
+def generate_event(content: str | None = None, tags: list[BaseTag] | None = None, kind: int | None = None) -> Event:
     priv, pub = _generate_keypairs()
     event_dict = {
         "pubkey": pub.serialize().hex()[2:],  # Strip the 02 in the beginning
         "created_at": int(datetime.datetime.now().timestamp()),
-        "kind": 1,
+        "kind": kind or 1,
         "tags": tags or [],
         "content": content or "Today is a good day for testing!",
     }

@@ -1,8 +1,22 @@
 import pytest
-from events.crud import fetch_event, write_event
+from events.crud import delete_event_by_kind_pubkey, fetch_event, fetch_event_by_kind_pubkey, write_event
 from events.data import Event
 
 from tests.events.utils import assert_two_events_same, generate_event
+
+
+@pytest.mark.asyncio
+async def test_event_storing_with_kind() -> None:
+    event = generate_event(kind=10001)
+    await write_event(event=event)
+    kp_event_dict = await fetch_event_by_kind_pubkey(event.kind, event.pubkey)
+    assert kp_event_dict
+    kp_event = Event(**kp_event_dict)
+    assert_two_events_same(event, kp_event)
+    await delete_event_by_kind_pubkey(event.kind, event.pubkey)
+
+    kp_event_dict = await fetch_event_by_kind_pubkey(event.kind, event.pubkey)
+    assert kp_event_dict is None
 
 
 @pytest.mark.asyncio

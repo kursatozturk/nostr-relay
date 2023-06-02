@@ -23,6 +23,11 @@ async def test_event_handler():
     stored_event = Event(**stored_event_dict)  # type: ignore
     assert_two_events_same(event, stored_event)
 
+    ephemeral_event = generate_event(kind=20001)
+    await handle_received_event(ephemeral_event.nostr_dict)
+    stored_event = await fetch_event(ephemeral_event.id)
+    assert not stored_event
+
 
 @pytest.mark.asyncio
 async def test_ws_event_handler():
